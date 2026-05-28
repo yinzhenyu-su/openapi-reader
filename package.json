@@ -1,0 +1,35 @@
+{
+  "name": "openapi-reader",
+  "version": "0.1.0",
+  "description": "CLI tool for LLM-friendly OpenAPI document querying",
+  "type": "module",
+  "bin": {
+    "openapi-reader": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint src/",
+    "lint:fix": "eslint src/ --fix",
+    "generate:skill": "node scripts/generate-project-skill.mjs"
+  },
+  "files": [
+    "dist"
+  ],
+  "dependencies": {
+    "@apidevtools/swagger-parser": "^10.1.1",
+    "commander": "^13.1.0",
+    "openapi-types": "^12.1.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.14.1",
+    "eslint": "^10.4.0",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.60.0",
+    "vitest": "^4.1.7"
+  }
+}

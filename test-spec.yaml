@@ -1,0 +1,763 @@
+openapi: "3.0.3"
+info:
+  title: Pet Store API
+  version: 1.0.0
+  description: A sample pet store API for testing openapi-reader
+
+servers:
+  - url: https://api.petstore.example.com/v1
+    description: Production server
+  - url: https://staging.petstore.example.com/v1
+    description: Staging server
+
+tags:
+  - name: Pets
+    description: Everything about pets
+  - name: Store
+    description: Access to store inventory
+  - name: Users
+    description: User management
+  - name: Payments
+    description: Payment processing
+
+paths:
+  /pets:
+    get:
+      tags: [Pets]
+      summary: List all pets
+      description: Returns a list of pets with pagination and filtering
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+          description: Page number
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+          description: Items per page
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [available, pending, sold]
+          description: Filter by pet status
+      responses:
+        "200":
+          description: A list of pets
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Pet"
+        "400":
+          description: Invalid query parameters
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "401":
+          description: Unauthorized
+
+    post:
+      tags: [Pets]
+      summary: Create a pet
+      description: Add a new pet to the store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreatePetRequest"
+      responses:
+        "201":
+          description: Pet created successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        "400":
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+        "409":
+          description: Pet already exists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /pets/{petId}:
+    get:
+      tags: [Pets]
+      summary: Get a pet by ID
+      description: Returns a single pet by its unique identifier
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: UUID of the pet
+      responses:
+        "200":
+          description: A pet object
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Pet"
+        "404":
+          description: Pet not found
+
+    delete:
+      tags: [Pets]
+      summary: Delete a pet
+      description: Remove a pet from the store
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: UUID of the pet
+      responses:
+        "204":
+          description: Pet deleted successfully
+        "404":
+          description: Pet not found
+
+  /pets/{petId}/medical-records:
+    get:
+      tags: [Pets]
+      summary: Get pet medical records
+      description: Retrieve all medical records for a specific pet
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: Medical records list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/MedicalRecord"
+        "404":
+          description: Pet not found
+
+  /store/inventory:
+    get:
+      tags: [Store]
+      summary: Get store inventory
+      description: Returns a map of inventory by status category
+      parameters:
+        - name: X-Request-Id
+          in: header
+          schema:
+            type: string
+            format: uuid
+          description: Unique request identifier for tracing
+        - name: Accept-Language
+          in: header
+          schema:
+            type: string
+            default: en
+          description: Preferred response language
+      responses:
+        "200":
+          description: Inventory map
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties:
+                  type: integer
+        "401":
+          description: Unauthorized
+
+  /store/orders:
+    post:
+      tags: [Store]
+      summary: Place an order
+      description: Place a new order in the store
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Order placed successfully
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "400":
+          description: Invalid order
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Error"
+
+  /store/orders/{orderId}:
+    get:
+      tags: [Store]
+      summary: Get order by ID
+      parameters:
+        - name: orderId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: UUID of the order
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          description: Order not found
+
+  /users:
+    post:
+      tags: [Users]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateUserRequest"
+      responses:
+        "201":
+          description: User created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "409":
+          description: Email already registered
+
+  /users/login:
+    post:
+      tags: [Users]
+      summary: User login
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User email
+                password:
+                  type: string
+                  format: password
+                  description: User password
+      responses:
+        "200":
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    description: JWT access token
+                  expiresIn:
+                    type: integer
+                    description: Token expiration in seconds
+        "401":
+          description: Invalid credentials
+
+  /users/{userId}:
+    get:
+      tags: [Users]
+      summary: Get user profile
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        "200":
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+        "404":
+          description: User not found
+
+  /payments:
+    post:
+      tags: [Payments]
+      summary: Process a payment
+      description: Handle payment using various payment methods
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentRequest"
+      responses:
+        "200":
+          description: Payment processed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentResult"
+        "400":
+          description: Invalid payment details
+        "402":
+          description: Payment declined
+
+  /pets/{petId}/archive:
+    put:
+      tags: [Pets]
+      summary: Archive a pet
+      description: Move a pet to archived state (no longer active)
+      deprecated: true
+      parameters:
+        - name: petId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+          description: UUID of the pet
+        - name: reason
+          in: header
+          required: true
+          schema:
+            type: string
+            enum: [sold, deceased, transferred, other]
+          description: Reason for archiving
+      responses:
+        "200":
+          description: Pet archived
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [archived]
+                  archivedAt:
+                    type: string
+                    format: date-time
+        "404":
+          description: Pet not found
+
+  /pets/{petId}/photos:
+    post:
+      tags: [Pets]
+      summary: Upload pet photo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: Pet photo image file
+                caption:
+                  type: string
+                  description: Optional photo caption
+      responses:
+        "201":
+          description: Photo uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Photo"
+        "400":
+          description: Invalid file
+
+  /health:
+    get:
+      tags: []
+      summary: Health check
+      description: Simple health check endpoint with no auth
+      security: []
+      responses:
+        "200":
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    enum: [ok]
+                  timestamp:
+                    type: string
+                    format: date-time
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Standard JWT bearer token
+
+  schemas:
+    Pet:
+      type: object
+      required: [id, name, species]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Unique identifier
+        name:
+          type: string
+          description: Pet name (1-100 characters)
+        species:
+          type: string
+          enum: [cat, dog, fish, bird, reptile]
+          description: Species of the pet
+        breed:
+          type: string
+          description: Specific breed if applicable
+        age:
+          type: integer
+          description: Age in years
+        status:
+          type: string
+          enum: [available, pending, sold]
+          description: Current availability status
+        owner:
+          $ref: "#/components/schemas/UserRef"
+        tags:
+          type: array
+          items:
+            type: string
+          description: Arbitrary tags for the pet
+        photos:
+          type: array
+          items:
+            $ref: "#/components/schemas/Photo"
+          description: Pet photos
+        createdAt:
+          type: string
+          format: date-time
+          description: When the pet was registered
+
+    CreatePetRequest:
+      type: object
+      required: [name, species, ownerId]
+      properties:
+        name:
+          type: string
+          description: Pet name (1-100 characters)
+        species:
+          type: string
+          enum: [cat, dog, fish, bird, reptile]
+        age:
+          type: integer
+          description: Age in years
+        ownerId:
+          type: string
+          format: uuid
+          description: UUID of the pet owner
+        tags:
+          type: array
+          items:
+            type: string
+
+    UserRef:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+
+    Photo:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        url:
+          type: string
+          format: uri
+        caption:
+          type: string
+        uploadedAt:
+          type: string
+          format: date-time
+
+    User:
+      type: object
+      required: [id, name, email]
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          description: Full name
+        email:
+          type: string
+          format: email
+        phone:
+          type: string
+          description: Contact phone number
+        role:
+          type: string
+          enum: [admin, user, vet]
+          description: User role
+        addresses:
+          type: array
+          items:
+            $ref: "#/components/schemas/Address"
+          description: User addresses
+
+    CreateUserRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+          description: Full name
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+          description: Password (min 8 characters)
+        phone:
+          type: string
+          description: Contact phone number
+
+    Address:
+      type: object
+      properties:
+        street:
+          type: string
+        city:
+          type: string
+        state:
+          type: string
+        zip:
+          type: string
+        country:
+          type: string
+          default: US
+
+    Order:
+      type: object
+      required: [id, petId, quantity, status]
+      properties:
+        id:
+          type: string
+          format: uuid
+        petId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+        shipDate:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [placed, approved, shipped, delivered, cancelled]
+        complete:
+          type: boolean
+
+    CreateOrderRequest:
+      type: object
+      required: [petId, quantity]
+      properties:
+        petId:
+          type: string
+          format: uuid
+        quantity:
+          type: integer
+          minimum: 1
+          default: 1
+
+    PaymentRequest:
+      type: object
+      required: [amount, currency, method]
+      properties:
+        amount:
+          type: number
+          description: Payment amount
+        currency:
+          type: string
+          default: USD
+          description: ISO 4217 currency code
+        method:
+          oneOf:
+            - type: object
+              required: [type, cardNumber]
+              properties:
+                type:
+                  type: string
+                  enum: [credit_card]
+                cardNumber:
+                  type: string
+                  description: Credit card number
+                expiry:
+                  type: string
+                  description: MM/YY format
+                cvv:
+                  type: string
+            - type: object
+              required: [type, email]
+              properties:
+                type:
+                  type: string
+                  enum: [paypal]
+                email:
+                  type: string
+                  format: email
+            - type: object
+              required: [type, walletAddress]
+              properties:
+                type:
+                  type: string
+                  enum: [crypto]
+                walletAddress:
+                  type: string
+                currency:
+                  type: string
+                  enum: [BTC, ETH, USDT]
+        description:
+          type: string
+          description: Payment description
+
+    PaymentResult:
+      type: object
+      properties:
+        transactionId:
+          type: string
+          format: uuid
+        status:
+          type: string
+          enum: [completed, pending, failed]
+        amount:
+          type: number
+        currency:
+          type: string
+        processedAt:
+          type: string
+          format: date-time
+
+    MedicalRecord:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        vetId:
+          type: string
+          format: uuid
+        diagnosis:
+          type: string
+        prescription:
+          type: string
+        date:
+          type: string
+          format: date
+        notes:
+          type: string
+
+    BaseEntity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+          description: Unique identifier
+        createdAt:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Record creation timestamp
+        updatedAt:
+          type: string
+          format: date-time
+          readOnly: true
+          description: Last update timestamp
+
+    Staff:
+      allOf:
+        - $ref: "#/components/schemas/BaseEntity"
+        - type: object
+          required: [name, email, role]
+          properties:
+            name:
+              type: string
+              description: Full name
+            email:
+              type: string
+              format: email
+            role:
+              type: string
+              enum: [vet, groomer, receptionist]
+              description: Staff role
+            hireDate:
+              type: string
+              format: date
+              description: Date of hire
+            salary:
+              type: number
+              readOnly: true
+              description: Current salary (read only)
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+          description: Error description
+        code:
+          type: string
+          description: Error code for programmatic handling
+        field:
+          type: string
+          description: Field that caused the error (validation)
