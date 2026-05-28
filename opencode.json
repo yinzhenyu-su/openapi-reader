@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "instructions": ["SKILL.md"],
+
+  "command": {
+    "build": {
+      "description": "Build the TypeScript project",
+      "prompt": "Run `npm run build` to compile src/ to dist/"
+    },
+    "dev": {
+      "description": "Watch mode for TypeScript compilation",
+      "prompt": "Run `npm run dev` to start tsc --watch"
+    },
+    "generate-skill": {
+      "description": "Regenerate project skill from source code",
+      "prompt": "Run `npm run generate:skill` to scan src/ and regenerate SKILL.md at project root"
+    }
+  }
+}
