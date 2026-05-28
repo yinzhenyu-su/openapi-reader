@@ -75,10 +75,10 @@ Output formatters for each query type. All are pure functions returning strings.
 
 ### Root files
 
-- **`index.ts`** — 
-- **`parser.ts`** — exports: `HttpMethod`, `OperationInfo`, `OpenApiParser`; types: `OperationInfo`
-- **`query.ts`** — exports: `QueryEngine`
-- **`types.ts`** — exports: `EndpointSummary`, `FieldInfo`, `ParamSection`, `ResponseInfo`, `EndpointDetail`, `BackRef`, `ApiSummary`, `SchemaInfo`; types: `EndpointSummary`, `FieldInfo`, `ParamSection`, `ResponseInfo`, `EndpointDetail`, `BackRef`, `ApiSummary`, `SchemaInfo`
+- **`index.ts`** — _no exports_
+- **`parser.ts`** — `HttpMethod`, `OperationInfo`, `OpenApiParser`
+- **`query.ts`** — `QueryEngine`
+- **`types.ts`** — `EndpointSummary`, `FieldInfo`, `ParamSection`, `ResponseInfo`, `EndpointDetail`, `BackRef`, `ApiSummary`, `SchemaInfo`
 
 
 ## Conventions

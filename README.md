@@ -49,7 +49,13 @@ openapi-reader <spec> summary
 ## Installation
 
 ```bash
-npm install -g
+# From npm registry (recommended)
+npm install -g openapi-reader
+
+# Or from source
+git clone https://github.com/yinzhenyu-su/openapi-reader.git
+cd openapi-reader
+npm install && npm run build && npm install -g .
 ```
 
 ## Usage
