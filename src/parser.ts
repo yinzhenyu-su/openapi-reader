@@ -24,7 +24,9 @@ function isCachedValid(cachePath: string): boolean {
       const age = Date.now() - meta._cachedAt
       return age < 3600_000
     }
-  } catch {}
+  } catch {
+    // ignore parse error
+  }
   return false
 }
 
@@ -55,7 +57,9 @@ export class OpenApiParser {
           this.doc = cached as OpenAPIV3.Document
           return
         }
-      } catch {}
+      } catch {
+        // ignore parse error
+      }
     }
 
     let raw: any
@@ -65,7 +69,9 @@ export class OpenApiParser {
         raw = JSON.parse(readFileSync(cachePath, 'utf-8'))
         delete raw._cachedAt
         delete raw._source
-      } catch {}
+      } catch {
+        // ignore parse error
+      }
     }
 
     if (!raw) {
@@ -79,7 +85,9 @@ export class OpenApiParser {
           const cachedDir = join(homedir(), '.cache', 'openapi-reader')
           if (!existsSync(cachedDir)) mkdirSync(cachedDir, { recursive: true })
           writeFileSync(cachePath, JSON.stringify({ ...raw, _cachedAt: Date.now(), _source: specPath }), 'utf-8')
-        } catch {}
+        } catch {
+          // ignore write error
+        }
       }
     }
 

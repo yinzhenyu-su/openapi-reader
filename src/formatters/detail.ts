@@ -1,5 +1,5 @@
 import type { EndpointDetail, FieldInfo } from '../types.js'
-import { fmtFields, fmtSectionHeader, fmtSeparator } from './shared.js'
+import { fmtFields, fmtSeparator } from './shared.js'
 
 export function formatDetail(detail: EndpointDetail): string {
   const lines: string[] = []

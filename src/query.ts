@@ -1,5 +1,5 @@
 import type { OpenAPIV3 } from 'openapi-types'
-import { type OperationInfo, type HttpMethod, OpenApiParser } from './parser.js'
+import { type OperationInfo, OpenApiParser } from './parser.js'
 import type {
   EndpointSummary, EndpointDetail, FieldInfo,
   ParamSection, ResponseInfo, ApiSummary, SchemaInfo, BackRef
