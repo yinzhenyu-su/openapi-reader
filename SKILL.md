@@ -6,7 +6,7 @@ description: |
   APIs, or needs help using the openapi-reader CLI.
 ---
 
-# openapi-reader v0.1.0
+# openapi-reader v0.2.1
 
 CLI tool for LLM-friendly OpenAPI document querying
 
@@ -34,7 +34,7 @@ openapi-reader <spec> <command> [options]
 
 ### `ls` — List all endpoints grouped by tag
 
-`openapi-reader ls <spec> [--tag] [--method] [--deprecated]`
+`openapi-reader ls <spec> [--tag] [--url] [--method] [--deprecated]`
 
 **参数:**
 
@@ -43,6 +43,7 @@ openapi-reader <spec> <command> [options]
 **选项:**
 
 - `--tag <name>` Filter by tag (可重复)
+- `--url <keyword>` Filter by URL path (fuzzy match)
 - `--method <method>` Filter by HTTP method
 - `--deprecated` Show only deprecated endpoints
 

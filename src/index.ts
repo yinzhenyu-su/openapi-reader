@@ -62,13 +62,15 @@ program
   .description('List all endpoints grouped by tag')
   .argument('<spec>', 'Path or URL to OpenAPI 3.0 spec')
   .option('--tag <name>', 'Filter by tag (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
+  .option('--url <keyword>', 'Filter by URL path (fuzzy match)')
   .option('--method <method>', 'Filter by HTTP method')
   .option('--deprecated', 'Show only deprecated endpoints')
-  .action(async (spec: string, options: { tag?: string[]; method?: string; deprecated?: boolean }) => {
+  .action(async (spec: string, options: { tag?: string[]; url?: string; method?: string; deprecated?: boolean }) => {
     try {
       const q = await ensureLoaded(spec)
       const endpoints = q.getEndpointSummary({
         tag: options.tag && options.tag.length > 0 ? options.tag : undefined,
+        url: options.url,
         method: options.method,
         deprecated: options.deprecated || undefined,
       })

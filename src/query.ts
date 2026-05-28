@@ -158,11 +158,17 @@ export class QueryEngine {
     this.parser = parser
   }
 
-  getEndpointSummary(filters?: { tag?: string[]; method?: string; deprecated?: boolean }): EndpointSummary[] {
+  getEndpointSummary(filters?: { tag?: string[]; url?: string; method?: string; deprecated?: boolean }): EndpointSummary[] {
     let ops = this.parser.getAllOperations()
 
     if (filters?.tag && filters.tag.length > 0) {
-      ops = ops.filter(op => op.tags.some(t => filters!.tag!.includes(t)))
+      ops = ops.filter(op => op.tags.some(t =>
+        filters.tag!.some(f => t.toLowerCase().includes(f.toLowerCase()))
+      ))
+    }
+    if (filters?.url) {
+      const lower = filters.url.toLowerCase()
+      ops = ops.filter(op => op.path.toLowerCase().includes(lower))
     }
     if (filters?.method) {
       ops = ops.filter(op => op.method === filters.method!.toUpperCase())
