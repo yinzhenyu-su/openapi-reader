@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { OpenApiParser } from '../parser.js'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
