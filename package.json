@@ -1,6 +1,6 @@
 {
   "name": "openapi-reader",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "CLI tool for LLM-friendly OpenAPI document querying",
   "repository": {
     "type": "git",
