@@ -356,7 +356,7 @@ export class QueryEngine {
       body = {
         contentType,
         required: rb.required ?? false,
-        fields: getMediaTypeFields(mediaType, schemaRegistry, depth),
+        fields: sortFields(getMediaTypeFields(mediaType, schemaRegistry, depth)),
       }
     }
 

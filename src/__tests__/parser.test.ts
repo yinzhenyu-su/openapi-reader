@@ -125,9 +125,9 @@ describe('OpenApiParser', () => {
 
     it('should search by tag', async () => {
       const parser = await createParser()
-      const results = parser.searchOperations('Store')
+      const results = parser.searchOperations('Pets')
       expect(results.length).toBeGreaterThan(0)
-      expect(results.every(r => r.tags.includes('Store'))).toBe(true)
+      expect(results.every(r => r.tags.includes('Pets'))).toBe(true)
     })
   })
 
