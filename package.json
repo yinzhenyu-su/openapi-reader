@@ -2,6 +2,10 @@
   "name": "openapi-reader",
   "version": "0.2.0",
   "description": "CLI tool for LLM-friendly OpenAPI document querying",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yinzhenyu-su/openapi-reader"
+  },
   "type": "module",
   "bin": {
     "openapi-reader": "dist/index.js"
