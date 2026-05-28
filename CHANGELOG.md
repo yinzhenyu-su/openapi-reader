@@ -1,3 +1,10 @@
+## [0.4.1](https://github.com/yinzhenyu-su/openapi-reader/compare/v0.4.0...v0.4.1) (2026-05-28)
+
+
+### Bug Fixes
+
+* sync SKILL.md version on npm publish ([fe85de8](https://github.com/yinzhenyu-su/openapi-reader/commit/fe85de86d49881485ecacdb48782d46846401848))
+
 # [0.4.0](https://github.com/yinzhenyu-su/openapi-reader/compare/v0.3.0...v0.4.0) (2026-05-28)
 
 
