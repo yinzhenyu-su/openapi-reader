@@ -13,14 +13,14 @@ CLI tool for LLM-friendly OpenAPI document querying
 ## 安装
 
 ```bash
-npx openapi-reader <spec> <command> [options]
+npx openapi-reader [spec] <command> [options]
 ```
 
 或全局安装:
 
 ```bash
 npm install -g openapi-reader
-openapi-reader <spec> <command> [options]
+openapi-reader [spec] <command> [options]
 ```
 
 ## 全局选项
@@ -101,13 +101,16 @@ openapi-reader <spec> <command> [options]
 
 ```bash
 # 查看 API 概览
-openapi-reader https://api.example.com/openapi.json summary
+openapi-reader https://api.example.com/openapi.json
 
 # 列出所有端点
 openapi-reader spec.yaml ls
 
 # 按 tag 过滤端点
 openapi-reader spec.yaml ls --tag users --tag admin
+
+# 按 URL 路径模糊搜索
+openapi-reader spec.yaml ls --url pet
 
 # 查看端点详情（含参数和响应）
 openapi-reader spec.yaml get POST /users
@@ -134,7 +137,7 @@ openapi-reader spec.yaml get POST /users --depth 1
 openapi-reader spec.yaml get POST /users --max-tokens 500
 
 # JSON 格式输出
-openapi-reader spec.yaml summary --format json
+openapi-reader spec.yaml --format json
 ```
 
 ## 输出格式
@@ -213,7 +216,8 @@ User
 
 ## 与 LLM 配合使用
 
-- 用 `openapi-reader spec.yaml summary` 快速了解 API
+- 用 `openapi-reader spec.yaml` 快速了解 API（默认为 summary）
+- 用 `--url` 按路径过滤端点（支持模糊匹配）
 - 用 `--depth 1` 限制嵌套深度，减少 token 消耗
 - 用 `--max-tokens 500` 控制输出长度
 - 用 `--format json` 输出结构化数据便于程序处理
