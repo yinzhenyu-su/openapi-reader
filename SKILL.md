@@ -6,7 +6,7 @@ description: |
   APIs, or needs help using the openapi-reader CLI.
 ---
 
-# openapi-reader v0.2.1
+# openapi-reader v0.3.0
 
 CLI tool for LLM-friendly OpenAPI document querying
 
