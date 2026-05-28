@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vitest'
 import { OpenApiParser } from '../parser.js'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -68,6 +68,38 @@ describe('OpenApiParser', () => {
       expect(counts['Store']).toBe(3)
       expect(counts['Users']).toBe(3)
     })
+
+    it('should detect deprecated endpoints', async () => {
+      const parser = await createParser()
+      const ops = parser.getAllOperations()
+      const deprecated = ops.filter(op => op.deprecated)
+      expect(deprecated.length).toBe(1)
+      expect(deprecated[0].path).toBe('/pets/{petId}/archive')
+      expect(deprecated[0].method).toBe('PUT')
+    })
+
+    it('should merge path-level parameters with operation parameters', async () => {
+      const parser = await createParser()
+      const op = parser.getOperation('GET', '/pets/{petId}')
+      expect(op).toBeDefined()
+      const pathParams = op!.parameters.filter(p => p.in === 'path')
+      expect(pathParams.length).toBe(1)
+      expect(pathParams[0].name).toBe('petId')
+    })
+
+    it('should handle endpoints with no tags as Other', async () => {
+      const parser = await createParser()
+      const op = parser.getOperation('GET', '/health')
+      expect(op).toBeDefined()
+      expect(op!.tags).toEqual([])
+    })
+
+    it('should include operation security override', async () => {
+      const parser = await createParser()
+      const op = parser.getOperation('GET', '/health')
+      expect(op).toBeDefined()
+      expect(op!.security).toEqual([])
+    })
   })
 
   describe('search', () => {
@@ -82,6 +114,20 @@ describe('OpenApiParser', () => {
       const parser = await createParser()
       const results = parser.searchOperations('zzzznotfound')
       expect(results.length).toBe(0)
+    })
+
+    it('should search by summary', async () => {
+      const parser = await createParser()
+      const results = parser.searchOperations('login')
+      expect(results.length).toBe(1)
+      expect(results[0].path).toBe('/users/login')
+    })
+
+    it('should search by tag', async () => {
+      const parser = await createParser()
+      const results = parser.searchOperations('Store')
+      expect(results.length).toBeGreaterThan(0)
+      expect(results.every(r => r.tags.includes('Store'))).toBe(true)
     })
   })
 
@@ -101,9 +147,28 @@ describe('OpenApiParser', () => {
       expect(schema!.type).toBe('object')
     })
 
+    it('should return undefined for non-existent schema', async () => {
+      const parser = await createParser()
+      expect(parser.getSchema('NonExistent')).toBeUndefined()
+    })
+
     it('should count schemas', async () => {
       const parser = await createParser()
       expect(parser.getSchemaCount()).toBeGreaterThan(0)
+    })
+
+    it('should return all schemas', async () => {
+      const parser = await createParser()
+      const schemas = parser.getAllSchemas()
+      expect(schemas).toHaveProperty('Pet')
+      expect(schemas).toHaveProperty('User')
+    })
+
+    it('should include allOf schema', async () => {
+      const parser = await createParser()
+      const schema = parser.getSchema('Staff')
+      expect(schema).toBeDefined()
+      expect(schema!.allOf).toBeDefined()
     })
   })
 
@@ -112,11 +177,55 @@ describe('OpenApiParser', () => {
       const parser = await createParser()
       const schemes = parser.getAuthSchemes()
       expect(schemes).toHaveProperty('bearerAuth')
+      expect(schemes['bearerAuth']).toBe('Bearer token (Authorization header)')
     })
 
-    it('should check if auth is required', async () => {
+    it('should check if auth is required globally', async () => {
       const parser = await createParser()
       expect(parser.requiresAuth()).toBe(true)
+    })
+
+    it('should check if auth is required for specific operation', async () => {
+      const parser = await createParser()
+      const healthOp = parser.getOperation('GET', '/health')
+      expect(parser.requiresAuth(healthOp!.security)).toBe(false)
+    })
+
+    it('should return auth summary', async () => {
+      const parser = await createParser()
+      const summary = parser.getAuthSummary()
+      expect(summary).toContain('Bearer token')
+    })
+
+    it('should return Optional when no global security', async () => {
+      const parser = new OpenApiParser()
+      const noAuthSpecPath = path.resolve(__dirname, '../../test-spec-no-auth.yaml')
+      await parser.load(noAuthSpecPath)
+      const summary = parser.getAuthSummary()
+      expect(summary).toContain('Optional')
+    })
+  })
+
+  describe('operation details', () => {
+    it('should include requestBody', async () => {
+      const parser = await createParser()
+      const op = parser.getOperation('POST', '/pets')
+      expect(op).toBeDefined()
+      expect(op!.requestBody).toBeDefined()
+    })
+
+    it('should include responses', async () => {
+      const parser = await createParser()
+      const op = parser.getOperation('GET', '/pets')
+      expect(op).toBeDefined()
+      expect(Object.keys(op!.responses).length).toBeGreaterThan(0)
+    })
+
+    it('should handle endpoints without requestBody', async () => {
+      const parser = await createParser()
+      const op = parser.getOperation('GET', '/pets')
+      expect(op).toBeDefined()
+      expect(op!.requestBody).toBeUndefined()
     })
   })
 })

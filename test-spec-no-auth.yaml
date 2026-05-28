@@ -1,0 +1,30 @@
+openapi: "3.0.3"
+info:
+  title: No Auth Test API
+  version: 1.0.0
+
+servers:
+  - url: https://api.example.com/v1
+
+paths:
+  /health:
+    get:
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+
+  /users:
+    post:
+      summary: Create user
+      security:
+        - bearerAuth: []
+      responses:
+        "201":
+          description: Created
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
