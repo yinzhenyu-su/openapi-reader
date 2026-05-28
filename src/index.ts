@@ -56,6 +56,25 @@ program
   .version('0.1.0')
   .option('--format <type>', 'Output format: text or json', 'text')
   .option('--no-cache', 'Skip cache for remote specs')
+  .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
+  .action(async (spec: string | undefined, options: { format?: string }) => {
+    if (!spec) {
+      program.help({ error: true })
+      return
+    }
+    try {
+      const q = await ensureLoaded(spec)
+      const summary = q.getApiSummary()
+      if (shouldFormatJson(options)) {
+        console.log(formatSummaryJSON(summary))
+      } else {
+        console.log(formatSummary(summary))
+      }
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`)
+      process.exit(1)
+    }
+  })
 
 program
   .command('ls')
