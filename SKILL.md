@@ -34,7 +34,7 @@ openapi-reader [spec] <command> [options]
 
 ### `ls` — List all endpoints grouped by tag
 
-`openapi-reader ls <spec> [--tag] [--url] [--method] [--deprecated]`
+`openapi-reader <spec> ls [--tag] [--url] [--method] [--deprecated]`
 
 **参数:**
 
@@ -49,7 +49,7 @@ openapi-reader [spec] <command> [options]
 
 ### `get` — Get endpoint details
 
-`openapi-reader get <spec> <method> <path> [--params] [--response] [--codes] [--depth] [--max-tokens]`
+`openapi-reader <spec> get <method> <path> [--params] [--response] [--codes] [--depth] [--max-tokens]`
 
 **参数:**
 
@@ -67,7 +67,7 @@ openapi-reader [spec] <command> [options]
 
 ### `search` — Search endpoints by keyword
 
-`openapi-reader search <spec> <keyword>`
+`openapi-reader <spec> search <keyword>`
 
 **参数:**
 
@@ -76,7 +76,7 @@ openapi-reader [spec] <command> [options]
 
 ### `schema` — View a schema/model definition
 
-`openapi-reader schema <spec> <name> [--used-by] [--depth]`
+`openapi-reader <spec> schema <name> [--used-by] [--depth]`
 
 **参数:**
 
@@ -90,7 +90,7 @@ openapi-reader [spec] <command> [options]
 
 ### `summary` — Show API overview
 
-`openapi-reader summary <spec>`
+`openapi-reader <spec> summary`
 
 **参数:**
 

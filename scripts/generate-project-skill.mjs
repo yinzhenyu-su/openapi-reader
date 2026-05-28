@@ -33,9 +33,12 @@ const globalOpts = ['--format <type>  Output format: text or json (default: text
   '--no-cache      Skip cache for remote specs']
 
 function usageLine(c) {
-  const args = c.args.map(a => a.syntax).join(' ')
+  const specArg = c.args.find(a => a.syntax === '<spec>')
+  const otherArgs = c.args.filter(a => a.syntax !== '<spec>').map(a => a.syntax).join(' ')
   const opts = c.opts.map(o => `[${o.flag.split(' ')[0]}]`).join(' ')
-  return `\`openapi-reader ${c.name} ${args}${opts ? ' ' + opts : ''}\``
+  const afterCmd = [otherArgs, opts].filter(Boolean).join(' ')
+  const spec = specArg ? specArg.syntax + ' ' : ''
+  return `\`openapi-reader ${spec}${c.name}${afterCmd ? ' ' + afterCmd : ''}\``
 }
 
 let commandsMd = ''
