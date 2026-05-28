@@ -56,25 +56,6 @@ program
   .version('0.1.0')
   .option('--format <type>', 'Output format: text or json', 'text')
   .option('--no-cache', 'Skip cache for remote specs')
-  .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
-  .action(async (spec: string | undefined, options: { format?: string }) => {
-    if (!spec) {
-      program.help({ error: true })
-      return
-    }
-    try {
-      const q = await ensureLoaded(spec)
-      const summary = q.getApiSummary()
-      if (shouldFormatJson(options)) {
-        console.log(formatSummaryJSON(summary))
-      } else {
-        console.log(formatSummary(summary))
-      }
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`)
-      process.exit(1)
-    }
-  })
 
 program
   .command('ls')
@@ -240,4 +221,49 @@ program
     }
   })
 
-program.parse(process.argv)
+const knownCommands = new Set(program.commands.map(c => c.name()))
+
+const valueOptions = new Set(
+  program.options
+    .filter(o => o.required || o.optional)
+    .map(o => o.long || o.short)
+    .filter(Boolean) as string[]
+)
+
+function prepareArgv(argv: string[]): string[] {
+  let firstPosIdx = -1
+  for (let i = 2; i < argv.length; i++) {
+    const arg = argv[i]
+    if (!arg.startsWith('-')) {
+      firstPosIdx = i
+      break
+    }
+    if (valueOptions.has(arg) && i + 1 < argv.length) {
+      i++
+    }
+  }
+  if (firstPosIdx < 0) return argv
+
+  if (knownCommands.has(argv[firstPosIdx])) return argv
+
+  let cmdIdx = -1
+  for (let i = firstPosIdx + 1; i < argv.length; i++) {
+    if (!argv[i].startsWith('-') && knownCommands.has(argv[i])) {
+      cmdIdx = i
+      break
+    }
+  }
+
+  if (cmdIdx >= 0) {
+    const newArgv = [...argv]
+    const cmd = newArgv.splice(cmdIdx, 1)[0]
+    newArgv.splice(firstPosIdx, 0, cmd)
+    return newArgv
+  }
+
+  const newArgv = [...argv]
+  newArgv.splice(firstPosIdx, 0, 'summary')
+  return newArgv
+}
+
+program.parse(prepareArgv(process.argv))
