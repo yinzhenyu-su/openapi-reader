@@ -67,13 +67,14 @@ openapi-reader [spec] get [method] [path] [options]
 ### `search` — Search everything by keyword
 
 ```
-openapi-reader [spec] search <keyword>
+openapi-reader search <keyword> [spec]
+openapi-reader <spec> search <keyword>
 ```
 
-Searches across all sources in one pass:
+Searches across all sources in one pass, including oneOf variant fields:
 - **Endpoints** — matches path, summary, description, tags, operationId, parameter names
-- **Schema fields** — matches field names and descriptions across all schemas
-- **Endpoint fields** — matches request/response parameter fields
+- **Schema fields** — matches field names and descriptions across all schemas (including oneOf variants)
+- **Endpoint fields** — matches request/response parameter fields (including oneOf variants)
 
 Results are grouped by category in the output.
 
@@ -228,6 +229,7 @@ Auth: Bearer token (Authorization header)
 - `oneOf (oneOf)` with `- variant_name:` — Polymorphic type variants, each variant labeled
 - `string[]` — Array type
 - `[DEPRECATED]` — Deprecated endpoint
+- `(empty)` — Response with no body fields
 
 ## Requirements
 

@@ -15,8 +15,11 @@ function extractCommandDetails() {
   return blocks.map(block => {
     const name = block.match(/\.command\(['"](\w+)['"]\)/)?.[1] ?? ''
     const desc = block.match(/\.description\(['"]([^'"]+)['"]\)/)?.[1] ?? ''
-    const args = [...block.matchAll(/\.argument\(['"](<[^>]+>)['"],\s*['"]([^'"]+)['"]\s*\)/g)]
+    const reqArgs = [...block.matchAll(/\.argument\(['"](<[^>]+>)['"],\s*['"]([^'"]+)['"]\s*\)/g)]
       .map(m => ({ syntax: m[1], desc: m[2] }))
+    const optArgs = [...block.matchAll(/\.argument\(['"](\[[^\]]+\])['"],\s*['"]([^'"]+)['"]\s*\)/g)]
+      .map(m => ({ syntax: m[1], desc: m[2] }))
+    const args = [...reqArgs, ...optArgs]
     const opts = [...block.matchAll(/\.option\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]/g)]
       .map(m => {
         const flag = m[1]
@@ -252,10 +255,11 @@ Used by:
 - 用 \`--depth 1\` 限制嵌套深度，减少 token 消耗
 - 用 \`--format json\` 输出结构化数据便于程序处理
 - \`get\` 命令支持 \`--params\`、\`--response [code]\` 子视图，只获取需要的信息
-- \`get\` 支持路径模糊匹配，传 POST pets 无需前导 /\`
-- \`search\` 一次搜索所有来源：端点、schema 字段、端点参数字段，按类别分组输出
+- \`get\` 支持路径模糊匹配，传 POST pets 无需前导 /
+- \`get --response\` 在多方法路径下自动过滤无匹配响应的方法（如 \`get /pets --response 201\` 只返回 POST 的 201）
+- \`search\` 一次搜索所有来源：端点、schema 字段、端点参数字段（包括 oneOf variant 内部字段），按类别分组输出
 - \`schema\` 自动显示 back references（哪些端点使用该模型）
-- \`schema\` 不传名称时列出所有模型名称，便于发现和导航
+- \`schema\` 不传名称时列出所有模型及描述，便于发现和导航
 - spec 参数可选，支持环境变量和配置文件
 - 输出中的 \`→ SchemaName\` 表示可进一步查询的模型引用
 `

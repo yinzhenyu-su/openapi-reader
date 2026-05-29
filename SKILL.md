@@ -52,7 +52,11 @@ openapi-reader ls
 
 ### `ls` — List all endpoints grouped by tag
 
-`openapi-reader ls [--tag] [--path] [--method] [--deprecated] [--brief]`
+`openapi-reader ls [spec] [--tag] [--path] [--method] [--deprecated] [--brief]`
+
+**参数:**
+
+- `[spec]` Path or URL to OpenAPI 3.0 spec
 
 **选项:**
 
@@ -64,7 +68,13 @@ openapi-reader ls
 
 ### `get` — Get endpoint details
 
-`openapi-reader get [--params] [--response] [--depth]`
+`openapi-reader get [spec] [method] [path] [--params] [--response] [--depth]`
+
+**参数:**
+
+- `[spec]` Path or URL to OpenAPI 3.0 spec
+- `[method]` HTTP method (GET, POST, etc.). Omit to list all methods on the path.
+- `[path]` Endpoint path (e.g., /pets). Supports fuzzy matching if exact path not found.
 
 **选项:**
 
@@ -74,11 +84,21 @@ openapi-reader ls
 
 ### `search` — Search endpoints, schemas, and fields by keyword
 
-`openapi-reader search`
+`openapi-reader search [spec] [keyword]`
+
+**参数:**
+
+- `[spec]` Path or URL to OpenAPI 3.0 spec
+- `[keyword]` Search keyword
 
 ### `schema` — View a schema/model definition
 
-`openapi-reader schema [--depth]`
+`openapi-reader schema [spec] [name] [--depth]`
+
+**参数:**
+
+- `[spec]` Path or URL to OpenAPI 3.0 spec
+- `[name]` Schema name
 
 **选项:**
 
@@ -220,9 +240,10 @@ Used by:
 - 用 `--depth 1` 限制嵌套深度，减少 token 消耗
 - 用 `--format json` 输出结构化数据便于程序处理
 - `get` 命令支持 `--params`、`--response [code]` 子视图，只获取需要的信息
-- `get` 支持路径模糊匹配，传 POST pets 无需前导 /`
-- `search` 一次搜索所有来源：端点、schema 字段、端点参数字段，按类别分组输出
+- `get` 支持路径模糊匹配，传 POST pets 无需前导 /
+- `get --response` 在多方法路径下自动过滤无匹配响应的方法（如 `get /pets --response 201` 只返回 POST 的 201）
+- `search` 一次搜索所有来源：端点、schema 字段、端点参数字段（包括 oneOf variant 内部字段），按类别分组输出
 - `schema` 自动显示 back references（哪些端点使用该模型）
-- `schema` 不传名称时列出所有模型名称，便于发现和导航
+- `schema` 不传名称时列出所有模型及描述，便于发现和导航
 - spec 参数可选，支持环境变量和配置文件
 - 输出中的 `→ SchemaName` 表示可进一步查询的模型引用
