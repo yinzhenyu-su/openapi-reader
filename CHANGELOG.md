@@ -1,3 +1,20 @@
+# [0.5.0](https://github.com/yinzhenyu-su/openapi-reader/compare/v0.4.1...v0.5.0) (2026-05-29)
+
+
+### Bug Fixes
+
+* allow semantic-release to publish from release branch ([28d8ea2](https://github.com/yinzhenyu-su/openapi-reader/commit/28d8ea26d1418f55bf3746083c549810e031fb15))
+* **cli:** rename --url to --path, fix response body expansion, add --brief ([f0c6732](https://github.com/yinzhenyu-su/openapi-reader/commit/f0c6732c1f2b23dd2de043c49253ff53c5de3d52))
+* remove broken search syntax from README, drop empty schema options table, and various code improvements ([36f5d43](https://github.com/yinzhenyu-su/openapi-reader/commit/36f5d43b7344dec2bc89741d87f6e0256bc61515))
+* restore implicit 'ls' default and document it ([56a1c11](https://github.com/yinzhenyu-su/openapi-reader/commit/56a1c11ed5f5b306695fb4ca8c9b017c7f664b45))
+* usability issues from LLM usage feedback ([8f1fe4e](https://github.com/yinzhenyu-su/openapi-reader/commit/8f1fe4e42392cca72d283dd47dd7caf92e623432))
+
+
+### Features
+
+* **cli:** spec cache, OpenAPI 2.0 support, and field search (--find) ([67b4c64](https://github.com/yinzhenyu-su/openapi-reader/commit/67b4c6463c06e890a3974f33fda043e23e3a8829))
+* restructure output format — LLM markdown as default, old format as --format human ([835cdac](https://github.com/yinzhenyu-su/openapi-reader/commit/835cdac1c03b9ad362d5716f4bcd029943bf54d3))
+
 ## [0.4.1](https://github.com/yinzhenyu-su/openapi-reader/compare/v0.4.0...v0.4.1) (2026-05-28)
 
 
