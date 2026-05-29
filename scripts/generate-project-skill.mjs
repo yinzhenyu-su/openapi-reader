@@ -15,278 +15,125 @@ function extractCommandDetails() {
   return blocks.map(block => {
     const name = block.match(/\.command\(['"](\w+)['"]\)/)?.[1] ?? ''
     const desc = block.match(/\.description\(['"]([^'"]+)['"]\)/)?.[1] ?? ''
-    const reqArgs = [...block.matchAll(/\.argument\(['"](<[^>]+>)['"],\s*['"]([^'"]+)['"]\s*\)/g)]
-      .map(m => ({ syntax: m[1], desc: m[2] }))
-    const optArgs = [...block.matchAll(/\.argument\(['"](\[[^\]]+\])['"],\s*['"]([^'"]+)['"]\s*\)/g)]
-      .map(m => ({ syntax: m[1], desc: m[2] }))
-    const args = [...reqArgs, ...optArgs]
-    const opts = [...block.matchAll(/\.option\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]/g)]
+    const optDefs = [...block.matchAll(/\.option\(['"]([^'"]+)['"],\s*['"]([^'"]+)['"]/g)]
       .map(m => {
         const flag = m[1]
-        const desc = m[2].replace(/\s*\(repeatable\).*/, '').trim()
-        const isRepeatable = m[2].includes('(repeatable)')
-        return { flag, desc, isRepeatable }
+        const rawDesc = m[2]
+        return { flag, desc: rawDesc }
       })
-    return { name, desc, args, opts }
+    return { name, desc, opts: optDefs }
   }).filter(c => c.name)
 }
 
 const commands = extractCommandDetails()
-const globalOpts = ['--format <type>  Output format: llm, human (or text), json (default: llm)',
-  '--no-cache      Skip cache for remote specs']
 
-function usageLine(c) {
-  const specArg = c.args.find(a => a.syntax === '<spec>')
-  const otherArgs = c.args.filter(a => a.syntax !== '<spec>').map(a => a.syntax).join(' ')
-  const opts = c.opts.map(o => `[${o.flag.split(' ')[0]}]`).join(' ')
-  const afterCmd = [otherArgs, opts].filter(Boolean).join(' ')
-  const spec = specArg ? specArg.syntax + ' ' : ''
-  return `\`openapi-reader ${spec}${c.name}${afterCmd ? ' ' + afterCmd : ''}\``
+function strategyLine(c) {
+  const map = {
+    ls: '浏览端点，按 tag/path/method 筛选，`--brief` 节省 token',
+    summary: '了解 API 全貌（大 spec 的起点，避免直接 search）',
+    get: '查看端点详情、参数、响应、示例，`--params/--response` 节省 token',
+    search: '全局搜索端点、schema 字段、参数字段，大 spec 慎用（先 `ls --path`）',
+    schema: '查看数据模型，不传 name 列出所有模型，支持模糊匹配',
+  }
+  return map[c.name] ?? c.desc
 }
 
-let commandsMd = ''
-for (const c of commands) {
-  commandsMd += `### \`${c.name}\` — ${c.desc}\n\n`
-  commandsMd += `${usageLine(c)}\n\n`
-  if (c.args.length) {
-    commandsMd += '**参数:**\n\n'
-    for (const a of c.args) {
-      commandsMd += `- \`${a.syntax}\` ${a.desc}\n`
-    }
-    commandsMd += '\n'
+const rows = commands.map(c => {
+  const tokenTips = {
+    ls: '`--brief` 省 50%+',
+    summary: '最少输出，首选',
+    get: '`--params`/`--response` 避免加载全部',
+    search: '大 spec 慎用',
+    schema: '不传 name 列出所有',
   }
-  if (c.opts.length) {
-    commandsMd += '**选项:**\n\n'
-    for (const o of c.opts) {
-      commandsMd += `- \`${o.flag}\` ${o.desc}${o.isRepeatable ? ' (可重复)' : ''}\n`
-    }
-    commandsMd += '\n'
-  }
-}
-
-const examples = [
-  '```bash',
-  '# API 概览（标题/版本/端点数/tag/method/认证/服务器/模型/schema 列表 + 命令提示）',
-  'openapi-reader spec.yaml summary',
-  '',
-  '# 概览与端点列表（一行显示标题/端点数/认证/服务器）',
-  'openapi-reader https://api.example.com/openapi.json ls',
-  '',
-  '# 列出所有端点',
-  'openapi-reader spec.yaml ls',
-  '',
-  '# 按 tag 过滤端点',
-  'openapi-reader spec.yaml ls --tag users --tag admin',
-  '',
-  '# 按路径模糊搜索',
-  'openapi-reader spec.yaml ls --path pet',
-  '',
-  '# 只看端点列表（无描述）',
-  'openapi-reader spec.yaml ls --brief',
-  '',
-  '# 查看端点详情（含参数和响应，ref 自动展开）',
-  'openapi-reader spec.yaml get POST /users',
-  '',
-  '# 只看请求参数',
-  'openapi-reader spec.yaml get POST /users --params',
-  '',
-  '# 只看响应（指定状态码）',
-  'openapi-reader spec.yaml get POST /users --response 201',
-  '',
-  '# 生成请求/响应 JSON 示例',
-  'openapi-reader spec.yaml get POST /pets --example',
-  '',
-  '# 全局搜索：端点 + schema 字段 + 端点字段',
-  'openapi-reader spec.yaml search user',
-  '',
-  '# 精确匹配字段名（不匹配子串，如 id 不匹配 petId）',
-  'openapi-reader spec.yaml search id --exact',
-  '',
-  '# 查看数据模型（自动显示引用来源，ref 自动展开）',
-  'openapi-reader spec.yaml schema User',
-  '',
-  '# 列出所有数据模型名称',
-  'openapi-reader spec.yaml schema',
-  '',
-  '# 只传路径查看该路径所有方法',
-  'openapi-reader spec.yaml get /users',
-  '',
-  '# 路径模糊匹配（无需前导 /）',
-  'openapi-reader spec.yaml get POST pets',
-  '',
-  '# JSON 格式输出',
-  'openapi-reader spec.yaml ls --format json',
-  '```'
-].join('\n')
+  const tip = tokenTips[c.name] ?? ''
+  return `| \`${c.name}\` | ${strategyLine(c)} | ${tip} |`
+}).join('\n')
 
 const content = `---
 name: openapi-reader
 description: |
-  CLI tool for querying OpenAPI 3.0 specifications. Use when the user asks
-  about API spec inspection, browsing endpoints, viewing schemas, searching
-  APIs, or needs help using the openapi-reader CLI.
+  CLI tool for querying OpenAPI 3.0 specifications. Use when the user
+  wants to explore, inspect, or understand an API — browse endpoints,
+  view schemas, search fields, read params/responses, or generate examples.
+  Common triggers: "what endpoints does this API have", "how do I call X",
+  "what's the schema for Y", "find endpoints related to Z", "show me the
+  API overview".
 ---
 
-# ${pkg.name} v${pkg.version}
+# openapi-reader v${pkg.version} — LLM 策略手册
 
-${pkg.description}
+Spec 路径通过 CLI 参数、\`OPENAPI_READER_SPEC\` 环境变量或 \`.openapi-reader.json\` 配置文件指定。所有命令默认输出 LLM 友好格式，加 \`--format json\` 输出 JSON。
 
-## 安装
-
-\`\`\`bash
-npx ${pkg.name} [spec] <command> [options]
-\`\`\`
-
-或全局安装:
+## 1. 快速概览（大 spec 的起点）
 
 \`\`\`bash
-npm install -g ${pkg.name}
-openapi-reader [spec] <command> [options]
+openapi-reader <spec> summary
+# 标题/版本/端点数/tag 分布/方法分布/认证/server/模型列表
 \`\`\`
 
-## Spec 来源
+**策略：** 面对大 spec（几百端点），先用 \`summary\` 了解全貌，确定相关 tag 后再缩小范围，不要直接 \`search\`。
 
-\`<spec>\` 参数可选，按以下优先级解析：
-
-1. CLI 参数（如提供）
-2. 环境变量 \`OPENAPI_READER_SPEC\`
-3. 当前目录的 \`.openapi-reader.json\` 或 \`openapi-reader.json\`（含 \`{"spec": "..."}\`）
+## 2. 浏览端点
 
 \`\`\`bash
-# 环境变量
-export OPENAPI_READER_SPEC=https://api.example.com/openapi.json
-openapi-reader ls
+# 列出所有端点（按 tag 分组）
+openapi-reader <spec> ls
 
-# 配置文件
-echo '{"spec":"openapi.yaml"}' > .openapi-reader.json
-openapi-reader ls
+# 按路径模糊筛选（推荐：先 summary 确定 tag/keyword）
+openapi-reader <spec> ls --path <keyword>
+
+# 按 tag/方法/已弃用筛选
+openapi-reader <spec> ls --tag <tag> [--method GET] [--deprecated]
+
+# Token 优化：只显示方法和路径，不显示描述
+openapi-reader <spec> ls --brief
 \`\`\`
 
-## 全局选项
+## 3. 查看端点详情
 
-\`\`\`
-${globalOpts.join('\n')}
-\`\`\`
+\`\`\`bash
+# 完整详情：请求参数 + 响应 + 错误码
+openapi-reader <spec> get <METHOD> <path>
 
-## 命令
+# Token 优化：只看参数或只看响应
+openapi-reader <spec> get <METHOD> <path> --params
+openapi-reader <spec> get <METHOD> <path> --response [code]
 
-${commandsMd}
-## 示例
-
-${examples}
-
-## 输出格式
-
-所有命令默认输出 LLM 优化格式，加 \`--format human\` 输出终端友好文本，加 \`--format json\` 输出 JSON。
-
-### 文本输出示例
-
-\`\`\`
-# summary (API 概览)
-## Pet Store API v1.0.0
-- Endpoints: 42
-- Tags: pets (12), users (8), store (22)
-- Methods: DELETE (5), GET (20), POST (10), PUT (7)
-- Auth: Bearer token (Authorization header)
-- Servers: https://api.example.com
-- Models: 15
-- Schemas: Pet, User, Order, Error, Address, PaymentRequest, ...
-
-> Commands: \`ls\` list endpoints | \`get <method> <path>\` details | \`search <keyword>\` search | \`schema <name>\` view model
-
-# ls (按 tag 分组，顶部概览)
-Pet Store API v1.0 | 42 endpoints | Auth: Bearer token
-────────────────────────────────────────────────
-pets:
-  GET    /pets          List all pets
-  POST   /pets          Create a pet
-  GET    /pets/{id}     Get pet by ID
-
-# get
-POST /users
-────────────────────────────────────────────────
-Auth:  Bearer token (Authorization header)
-
-Path Parameters:
-  id                   int        ✱  User ID
-
-Request Body (application/json) ✱:
-  name                 string     ✱  Full name
-  email                string     ✱  Email address
-  role                 string        User role
-
-Responses:
-  201  Created
-    id                 int        ✱  User ID
-    name               string     ✱  Full name
-  400  Bad request
-  404  Not found
-
-# search (按类别分组)
-Search results for "user":
-
-Endpoints:
-  GET    /users         List users
-  POST   /users         Create user
-
-Schema Fields:
-  User
-    email: string, req  Email address
-
-Endpoint Fields:
-  POST /users
-    email: string, req  Email address
-
-# schema
-User
-────────────────────────────────────────────────
-  id                   int        ✱  User ID
-  name                 string     ✱  Full name
-  email                string     ✱  Email address
-  role                 string        User role
-
-Used by:
-  GET /users  (response 200)
-  POST /users  (request body)
+# 生成请求/响应 JSON 示例
+openapi-reader <spec> get <METHOD> <path> --example
 \`\`\`
 
-### JSON 输出示例
+路径支持模糊匹配，\`get POST pets\` 和 \`get POST /api/v1/pets\` 均可。
 
-\`\`\`json
-{
-  "title": "Pet Store API",
-  "version": "1.0",
-  "endpoints": 42,
-  "tags": [
-    { "name": "pets", "count": 12 }
-  ],
-  "auth": "Bearer token (Authorization header)",
-  "servers": ["https://api.example.com"],
-  "models": 15
-}
+## 4. 搜索（大 spec 谨慎使用）
+
+\`\`\`bash
+openapi-reader <spec> search <keyword> [--exact]
 \`\`\`
 
-## 与 LLM 配合使用
+**策略：**
+- 小 spec（<100 端点）直接 \`search\` 效率最高
+- 大 spec（如 714 端点）\`search\` 可能栈溢出 → **fallback：** 先用 \`ls --path\` 缩小范围，或用 \`ls\` + 手动筛选
+- \`--exact\` 避免子串噪音（如 \`id\` 不匹配 \`petId\`）
 
-- 用 \`openapi-reader spec.yaml summary\` 快速了解 API 全貌（标题/版本/端点数/tag/method 分布/认证/服务器/模型数/schema 列表 + 命令提示）
-- 用 \`openapi-reader spec.yaml ls\` 查看端点列表（标题/端点数/认证/服务器 + 按 tag 分组）
-- 用 \`--path\` 按路径过滤端点（支持模糊匹配）
-- 用 \`--example\` 生成请求/响应 JSON 示例，便于快速构造调用
-- 用 \`--format json\` 输出结构化数据便于程序处理
-- \`get\` 命令自动展开所有 ref（嵌套 schema 字段直接内联显示）
-- \`get\` 命令支持 \`--params\`、\`--response [code]\` 子视图，只获取需要的信息
-- \`get\` 支持路径模糊匹配，传 POST pets 无需前导 /
-- \`get --response\` 在多方法路径下自动过滤无匹配响应的方法（如 \`get /pets --response 201\` 只返回 POST 的 201）
-- \`search\` 一次搜索所有来源：端点、schema 字段、端点参数字段（包括 oneOf variant 内部字段），按类别分组输出
-- \`search --exact\` 精确匹配字段名，避免子串匹配噪音（如 \`id\` 不匹配 \`petId\`）
-- \`schema\` 命令自动展开所有 ref（嵌套 schema 字段直接内联显示）
-- \`schema\` 自动显示 back references（哪些端点使用该模型）
-- \`schema\` 不传名称时列出所有模型及描述，便于发现和导航
-- \`schema\` 支持模糊查询：大小写不敏感精确匹配优先，其次子串匹配（唯一匹配自动选中，多个匹配列出候选）
-- \`schema\` 找不到时自动列出所有可用 schema 名称
-- \`ls --tag\` 无匹配时自动提示可用 tag 列表
-- \`get\` 多方法路径时显示简要列表而非全部详情，节省 token
-- spec 参数可选，支持环境变量和配置文件
+## 5. 查看数据模型
+
+\`\`\`bash
+# 列出所有模型（含描述）
+openapi-reader <spec> schema
+
+# 查看特定模型（自动展开字段 + 显示引用来源）
+openapi-reader <spec> schema <name>
+\`\`\`
+
+模型名不区分大小写，支持子串模糊匹配。
+
+## 命令速查
+
+| 命令 | 用途 | Token 节省技巧 |
+|---|---|---|
+${rows}
 `
 
 writeFileSync(SKILL_FILE, content, 'utf-8')

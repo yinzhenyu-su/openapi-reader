@@ -81,8 +81,8 @@ openapi-reader <spec> schema <name>
 
 | 命令 | 用途 | Token 节省技巧 |
 |---|---|---|
-| `summary` | 了解全貌 | 最少输出，首选 |
-| `ls [--path x] [--brief]` | 浏览端点 | `--brief` 省 50%+ |
-| `get --params / --response` | 查看局部详情 | 避免加载全部 |
-| `search [--exact]` | 全文搜索 | 大 spec 慎用 |
-| `schema [name]` | 查看模型 | 不传 name 列出所有 |
+| `ls` | 浏览端点，按 tag/path/method 筛选，`--brief` 节省 token | `--brief` 省 50%+ |
+| `summary` | 了解 API 全貌（大 spec 的起点，避免直接 search） | 最少输出，首选 |
+| `get` | 查看端点详情、参数、响应、示例，`--params/--response` 节省 token | `--params`/`--response` 避免加载全部 |
+| `search` | 全局搜索端点、schema 字段、参数字段，大 spec 慎用（先 `ls --path`） | 大 spec 慎用 |
+| `schema` | 查看数据模型，不传 name 列出所有模型，支持模糊匹配 | 不传 name 列出所有 |
