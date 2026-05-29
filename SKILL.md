@@ -34,7 +34,7 @@ openapi-reader [spec] <command> [options]
 
 ### `ls` — List all endpoints grouped by tag
 
-`openapi-reader <spec> ls [--tag] [--url] [--method] [--deprecated] [--find]`
+`openapi-reader <spec> ls [--tag] [--path] [--method] [--deprecated] [--brief] [--find]`
 
 **参数:**
 
@@ -43,9 +43,10 @@ openapi-reader [spec] <command> [options]
 **选项:**
 
 - `--tag <name>` Filter by tag (可重复)
-- `--url <keyword>` Filter by URL path (fuzzy match)
+- `--path <keyword>` Filter by path (fuzzy match)
 - `--method <method>` Filter by HTTP method
 - `--deprecated` Show only deprecated endpoints
+- `--brief` Show method and path only (no descriptions)
 - `--find <keyword>` Search endpoint parameter fields
 
 ### `get` — Get endpoint details

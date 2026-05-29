@@ -3,13 +3,13 @@
 import { Command } from 'commander'
 import { OpenApiParser } from './parser.js'
 import { QueryEngine } from './query.js'
-import { formatListingHuman } from './formatters/listing.js'
+import { formatListingHuman, formatListingBriefHuman } from './formatters/listing.js'
 import { formatDetailHuman, formatParamsOnlyHuman, formatResponseOnlyHuman, formatCodesOnlyHuman } from './formatters/detail.js'
 import { formatSearchHuman } from './formatters/search.js'
 import { formatSchemaHuman, formatSchemaWithBackRefsHuman, formatSchemaNotFound } from './formatters/schema.js'
 import { formatSummaryHuman } from './formatters/summary.js'
 import {
-  formatListingLLM, formatDetailLLM, formatParamsOnlyLLM, formatResponseOnlyLLM, formatCodesOnlyLLM,
+  formatListingLLM, formatListingBriefLLM, formatDetailLLM, formatParamsOnlyLLM, formatResponseOnlyLLM, formatCodesOnlyLLM,
   formatSearchLLM, formatSchemaLLM, formatSchemaWithBackRefsLLM, formatSummaryLLM
 } from './formatters/llm.js'
 import {
@@ -74,11 +74,12 @@ program
   .description('List all endpoints grouped by tag')
   .argument('<spec>', 'Path or URL to OpenAPI 3.0 spec')
   .option('--tag <name>', 'Filter by tag (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
-  .option('--url <keyword>', 'Filter by URL path (fuzzy match)')
+  .option('--path <keyword>', 'Filter by path (fuzzy match)')
   .option('--method <method>', 'Filter by HTTP method')
   .option('--deprecated', 'Show only deprecated endpoints')
+  .option('--brief', 'Show method and path only (no descriptions)')
   .option('--find <keyword>', 'Search endpoint parameter fields')
-  .action(async (spec: string, options: { tag?: string[]; url?: string; method?: string; deprecated?: boolean; find?: string }) => {
+  .action(async (spec: string, options: { tag?: string[]; path?: string; method?: string; deprecated?: boolean; brief?: boolean; find?: string }) => {
     try {
       const q = await ensureLoaded(spec)
 
@@ -90,13 +91,15 @@ program
 
       const endpoints = q.getEndpointSummary({
         tag: options.tag && options.tag.length > 0 ? options.tag : undefined,
-        url: options.url,
+        url: options.path,
         method: options.method,
         deprecated: options.deprecated || undefined,
       })
 
       const fmt = getFormatterType(options)
-      if (fmt === 'json') {
+      if (options.brief) {
+        console.log(fmt === 'human' ? formatListingBriefHuman(endpoints) : formatListingBriefLLM(endpoints))
+      } else if (fmt === 'json') {
         console.log(formatListingJSON(endpoints))
       } else if (fmt === 'human') {
         console.log(formatListingHuman(endpoints))

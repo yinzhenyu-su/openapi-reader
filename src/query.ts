@@ -81,6 +81,14 @@ function schemaToFields(
   currentDepth = 0
 ): FieldInfo[] {
   const resolved = mergeAllOf(schema)
+
+  if (resolved.type === 'array') {
+    const items = resolved.items as OpenAPIV3.SchemaObject | undefined
+    if (items?.type === 'object' && items.properties) {
+      return schemaToFields(items, schemaRegistry, depth, currentDepth)
+    }
+  }
+
   if (!resolved.properties) return []
   const requiredSet = new Set(resolved.required ?? [])
 

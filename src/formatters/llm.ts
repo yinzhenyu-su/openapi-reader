@@ -35,6 +35,28 @@ function fmtFieldsLLM(fields: FieldInfo[], indent = 0): string {
   return lines.join('\n')
 }
 
+export function formatListingBriefLLM(endpoints: EndpointSummary[]): string {
+  const groups = new Map<string, EndpointSummary[]>()
+  for (const ep of endpoints) {
+    for (const tag of ep.tags) {
+      if (!groups.has(tag)) groups.set(tag, [])
+      groups.get(tag)!.push(ep)
+    }
+  }
+
+  const sortedTags = [...groups.keys()].sort()
+  const lines: string[] = []
+
+  for (const tag of sortedTags) {
+    lines.push(`## ${tag}`)
+    for (const ep of groups.get(tag)!) {
+      lines.push(`${ep.method} ${ep.path}`)
+    }
+  }
+
+  return lines.join('\n')
+}
+
 export function formatListingLLM(endpoints: EndpointSummary[]): string {
   const groups = new Map<string, EndpointSummary[]>()
   for (const ep of endpoints) {
