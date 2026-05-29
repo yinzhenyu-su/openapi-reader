@@ -1,5 +1,5 @@
 import SwaggerParser from '@apidevtools/swagger-parser'
-import type { OpenAPIV3 } from 'openapi-types'
+import type { OpenAPIV3, OpenAPIV2 } from 'openapi-types'
 import { createHash } from 'node:crypto'
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'node:fs'
 import { homedir } from 'node:os'
@@ -44,6 +44,43 @@ export interface OperationInfo {
   deprecationMessage: string | undefined
 }
 
+function normalizeV2(doc: OpenAPIV2.Document): OpenAPIV3.Document {
+  const servers: OpenAPIV3.ServerObject[] = []
+  if (doc.host || doc.basePath || doc.schemes) {
+    const base = doc.basePath ?? ''
+    const protocol = Array.isArray(doc.schemes) ? doc.schemes[0] : 'https'
+    const host = doc.host ?? 'localhost'
+    servers.push({ url: `${protocol}://${host}${base}` })
+  }
+
+  const securitySchemes: Record<string, OpenAPIV3.SecuritySchemeObject> = {}
+  if (doc.securityDefinitions) {
+    for (const [name, def] of Object.entries(doc.securityDefinitions)) {
+      const d = def as OpenAPIV2.SecuritySchemeObject
+      if (d.type === 'basic') {
+        securitySchemes[name] = { type: 'http', scheme: 'basic' }
+      } else if (d.type === 'apiKey') {
+        securitySchemes[name] = { type: 'apiKey', name: d.name!, in: d.in! as 'header' | 'query' }
+      } else if (d.type === 'oauth2') {
+        securitySchemes[name] = { type: 'oauth2', flows: {} as any }
+      }
+    }
+  }
+
+  return {
+    openapi: '3.0.0',
+    info: doc.info,
+    servers,
+    paths: doc.paths as OpenAPIV3.PathsObject,
+    components: {
+      schemas: doc.definitions as Record<string, OpenAPIV3.SchemaObject> | undefined,
+      securitySchemes: Object.keys(securitySchemes).length > 0 ? securitySchemes : undefined,
+    },
+    security: doc.security as OpenAPIV3.SecurityRequirementObject[] | undefined,
+    tags: doc.tags,
+  }
+}
+
 export class OpenApiParser {
   private doc!: OpenAPIV3.Document
 
@@ -53,42 +90,26 @@ export class OpenApiParser {
     if (cachePath && !noCache && isCachedValid(cachePath)) {
       try {
         const cached = JSON.parse(readFileSync(cachePath, 'utf-8'))
-        if (cached._openapi || cached.openapi) {
-          this.doc = cached as OpenAPIV3.Document
-          return
-        }
+        delete cached._cachedAt
+        delete cached._source
+        this.doc = cached as OpenAPIV3.Document
+        return
       } catch {
         // ignore parse error
       }
     }
 
-    let raw: any
+    let raw: any = await SwaggerParser.parse(specPath)
 
-    if (cachePath && !noCache && isCachedValid(cachePath)) {
-      try {
-        raw = JSON.parse(readFileSync(cachePath, 'utf-8'))
-        delete raw._cachedAt
-        delete raw._source
-      } catch {
-        // ignore parse error
+    if (!('openapi' in raw)) {
+      if (raw.swagger?.startsWith('2')) {
+        raw = await SwaggerParser.dereference(raw)
+        raw = normalizeV2(raw)
+      } else {
+        throw new Error('Unsupported spec format. Only OpenAPI 2.0 (Swagger) and 3.0 are supported.')
       }
-    }
-
-    if (!raw) {
-      raw = await SwaggerParser.parse(specPath) as any
-      if (!('openapi' in raw)) {
-        throw new Error('Only OpenAPI 3.0 is supported. The spec appears to be Swagger 2.0.')
-      }
-
-      if (cachePath) {
-        try {
-          const cachedDir = join(homedir(), '.cache', 'openapi-reader')
-          if (!existsSync(cachedDir)) mkdirSync(cachedDir, { recursive: true })
-          writeFileSync(cachePath, JSON.stringify({ ...raw, _cachedAt: Date.now(), _source: specPath }), 'utf-8')
-        } catch {
-          // ignore write error
-        }
-      }
+    } else {
+      raw = await SwaggerParser.dereference(raw)
     }
 
     if (raw.components?.schemas) {
@@ -98,7 +119,17 @@ export class OpenApiParser {
       }
     }
 
-    this.doc = await SwaggerParser.dereference(raw) as OpenAPIV3.Document
+    this.doc = raw as OpenAPIV3.Document
+
+    if (cachePath) {
+      try {
+        const cachedDir = join(homedir(), '.cache', 'openapi-reader')
+        if (!existsSync(cachedDir)) mkdirSync(cachedDir, { recursive: true })
+        writeFileSync(cachePath, JSON.stringify({ ...this.doc, _cachedAt: Date.now(), _source: specPath }), 'utf-8')
+      } catch {
+        // ignore write error
+      }
+    }
   }
 
   getTitle(): string {

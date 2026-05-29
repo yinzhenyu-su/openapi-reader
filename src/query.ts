@@ -321,6 +321,50 @@ export class QueryEngine {
     }))
   }
 
+  searchFields(keyword: string): { schema: string; fields: FieldInfo[] }[] {
+    const lower = keyword.toLowerCase()
+    const results: { schema: string; fields: FieldInfo[] }[] = []
+
+    for (const [name, schema] of Object.entries(this.parser.getAllSchemas())) {
+      const fields = schemaToFields(schema, this.parser.getAllSchemas(), 1)
+      const matched = fields.filter(f =>
+        f.name.toLowerCase().includes(lower) ||
+        (f.description && f.description.toLowerCase().includes(lower))
+      )
+      if (matched.length > 0) {
+        results.push({ schema: name, fields: matched })
+      }
+    }
+
+    return results.sort((a, b) => a.schema.localeCompare(b.schema))
+  }
+
+  searchEndpointFields(keyword: string): { method: string; path: string; fields: FieldInfo[] }[] {
+    const lower = keyword.toLowerCase()
+    const results: { method: string; path: string; fields: FieldInfo[] }[] = []
+
+    for (const op of this.parser.getAllOperations()) {
+      const schemaRegistry = this.parser.getAllSchemas()
+      const params = this.extractParams(op, schemaRegistry, 1)
+      const allFields: FieldInfo[] = [
+        ...params.pathParams,
+        ...params.queryParams,
+        ...params.headerParams,
+        ...(params.body?.fields ?? []),
+      ]
+
+      const matched = allFields.filter(f =>
+        f.name.toLowerCase().includes(lower) ||
+        (f.description && f.description.toLowerCase().includes(lower))
+      )
+      if (matched.length > 0) {
+        results.push({ method: op.method, path: op.path, fields: matched })
+      }
+    }
+
+    return results.sort((a, b) => a.path.localeCompare(b.path))
+  }
+
   getApiSummary(): ApiSummary {
     return {
       title: this.parser.getTitle(),

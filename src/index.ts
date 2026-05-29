@@ -13,6 +13,9 @@ import {
   formatSearchLLM, formatSchemaLLM, formatSchemaWithBackRefsLLM, formatSummaryLLM
 } from './formatters/llm.js'
 import {
+  formatSchemaFieldSearch, formatEndpointFieldSearch
+} from './formatters/search-fields.js'
+import {
   formatListingJSON, formatDetailJSON, formatSearchJSON,
   formatSchemaJSON, formatSummaryJSON
 } from './formatters/json.js'
@@ -74,9 +77,17 @@ program
   .option('--url <keyword>', 'Filter by URL path (fuzzy match)')
   .option('--method <method>', 'Filter by HTTP method')
   .option('--deprecated', 'Show only deprecated endpoints')
-  .action(async (spec: string, options: { tag?: string[]; url?: string; method?: string; deprecated?: boolean }) => {
+  .option('--find <keyword>', 'Search endpoint parameter fields')
+  .action(async (spec: string, options: { tag?: string[]; url?: string; method?: string; deprecated?: boolean; find?: string }) => {
     try {
       const q = await ensureLoaded(spec)
+
+      if (options.find) {
+        const results = q.searchEndpointFields(options.find)
+        console.log(formatEndpointFieldSearch(results, options.find))
+        return
+      }
+
       const endpoints = q.getEndpointSummary({
         tag: options.tag && options.tag.length > 0 ? options.tag : undefined,
         url: options.url,
@@ -189,12 +200,31 @@ program
   .command('schema')
   .description('View a schema/model definition')
   .argument('<spec>', 'Path or URL to OpenAPI 3.0 spec')
-  .argument('<name>', 'Schema name')
+  .argument('[name]', 'Schema name')
   .option('--used-by', 'Show which endpoints use this schema')
   .option('--depth <n>', 'Nested field depth', parseInt)
-  .action(async (spec: string, name: string, options: { usedBy?: boolean; depth?: number; format?: string }) => {
+  .option('--find <keyword>', 'Search schema fields across all schemas')
+  .action(async (spec: string, name: string | undefined, options: { usedBy?: boolean; depth?: number; format?: string; find?: string }) => {
     try {
       const q = await ensureLoaded(spec)
+
+      if (options.find) {
+        if (name) {
+          const results = q.searchFields(options.find)
+          const filtered = results.filter(r => r.schema === name)
+          console.log(formatSchemaFieldSearch(filtered, options.find))
+        } else {
+          const results = q.searchFields(options.find)
+          console.log(formatSchemaFieldSearch(results, options.find))
+        }
+        return
+      }
+
+      if (!name) {
+        console.error('Error: Schema name is required without --find')
+        process.exit(1)
+      }
+
       const depth = options.depth ?? -1
       const schema = q.getSchema(name, depth)
 

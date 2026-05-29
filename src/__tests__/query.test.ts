@@ -284,6 +284,40 @@ describe('QueryEngine', () => {
     })
   })
 
+  describe('searchFields', () => {
+    it('should find schema fields by name', () => {
+      const results = query.searchFields('email')
+      expect(results.length).toBeGreaterThan(0)
+      const userResult = results.find(r => r.schema === 'User')
+      expect(userResult).toBeDefined()
+      expect(userResult!.fields.some(f => f.name === 'email')).toBe(true)
+    })
+
+    it('should find schema fields by description', () => {
+      const results = query.searchFields('identifier')
+      expect(results.length).toBeGreaterThan(0)
+      expect(results.some(r => r.fields.some(f => f.name === 'id'))).toBe(true)
+    })
+
+    it('should return empty for unmatched keyword', () => {
+      const results = query.searchFields('zzzznotfound')
+      expect(results.length).toBe(0)
+    })
+  })
+
+  describe('searchEndpointFields', () => {
+    it('should find endpoint fields by name', () => {
+      const results = query.searchEndpointFields('page')
+      expect(results.length).toBeGreaterThan(0)
+      expect(results.some(r => r.path === '/pets')).toBe(true)
+    })
+
+    it('should return empty for unmatched keyword', () => {
+      const results = query.searchEndpointFields('zzzznotfound')
+      expect(results.length).toBe(0)
+    })
+  })
+
   describe('searchEndpoints', () => {
     it('should find endpoints by path keyword', () => {
       const results = query.searchEndpoints('pet')

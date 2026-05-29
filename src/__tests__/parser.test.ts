@@ -206,6 +206,36 @@ describe('OpenApiParser', () => {
     })
   })
 
+  describe('OpenAPI 2.0 (Swagger) support', () => {
+    it('should load a Swagger 2.0 spec', async () => {
+      const swaggerPath = path.resolve(__dirname, '../../test-spec-swagger.yaml')
+      const parser = new OpenApiParser()
+      await parser.load(swaggerPath)
+      expect(parser.getTitle()).toBe('Swagger Pet Store')
+      expect(parser.getVersion()).toBe('1.0.0')
+    })
+
+    it('should resolve definitions in Swagger 2.0 spec', async () => {
+      const swaggerPath = path.resolve(__dirname, '../../test-spec-swagger.yaml')
+      const parser = new OpenApiParser()
+      await parser.load(swaggerPath)
+      const schemaNames = parser.getSchemaNames()
+      expect(schemaNames).toContain('Pet')
+      const schema = parser.getSchema('Pet')
+      expect(schema).toBeDefined()
+    })
+
+    it('should extract operations from Swagger 2.0 spec', async () => {
+      const swaggerPath = path.resolve(__dirname, '../../test-spec-swagger.yaml')
+      const parser = new OpenApiParser()
+      await parser.load(swaggerPath)
+      const ops = parser.getAllOperations()
+      expect(ops.length).toBe(1)
+      expect(ops[0].method).toBe('GET')
+      expect(ops[0].path).toBe('/pets')
+    })
+  })
+
   describe('operation details', () => {
     it('should include requestBody', async () => {
       const parser = await createParser()

@@ -34,7 +34,7 @@ openapi-reader [spec] <command> [options]
 
 ### `ls` — List all endpoints grouped by tag
 
-`openapi-reader <spec> ls [--tag] [--url] [--method] [--deprecated]`
+`openapi-reader <spec> ls [--tag] [--url] [--method] [--deprecated] [--find]`
 
 **参数:**
 
@@ -46,6 +46,7 @@ openapi-reader [spec] <command> [options]
 - `--url <keyword>` Filter by URL path (fuzzy match)
 - `--method <method>` Filter by HTTP method
 - `--deprecated` Show only deprecated endpoints
+- `--find <keyword>` Search endpoint parameter fields
 
 ### `get` — Get endpoint details
 
@@ -76,17 +77,17 @@ openapi-reader [spec] <command> [options]
 
 ### `schema` — View a schema/model definition
 
-`openapi-reader <spec> schema <name> [--used-by] [--depth]`
+`openapi-reader <spec> schema [--used-by] [--depth] [--find]`
 
 **参数:**
 
 - `<spec>` Path or URL to OpenAPI 3.0 spec
-- `<name>` Schema name
 
 **选项:**
 
 - `--used-by` Show which endpoints use this schema
 - `--depth <n>` Nested field depth
+- `--find <keyword>` Search schema fields across all schemas
 
 ### `summary` — Show API overview
 
