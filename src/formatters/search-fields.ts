@@ -5,7 +5,9 @@ function fmtField(field: FieldInfo): string {
   const type = fmtType(field)
   const req = field.required ? 'req' : 'opt'
   const desc = field.description ? `  ${truncateDesc(field.description)}` : ''
-  return `  - ${field.name}: ${type}, ${req}${desc}`
+  const def = field.defaultValue ? `  =${field.defaultValue}` : ''
+  const ex = field.example ? `  eg:${field.example}` : ''
+  return `  - ${field.name}: ${type}, ${req}${desc}${def}${ex}`
 }
 
 export function formatSchemaFieldSearch(results: { schema: string; fields: FieldInfo[] }[], keyword: string): string {

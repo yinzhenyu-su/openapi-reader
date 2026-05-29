@@ -1,24 +1,42 @@
 #!/usr/bin/env node
 
 import { Command } from 'commander'
+import { existsSync, readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { OpenApiParser } from './parser.js'
 import { QueryEngine } from './query.js'
 import { formatListingHuman, formatListingBriefHuman } from './formatters/listing.js'
-import { formatDetailHuman, formatParamsOnlyHuman, formatResponseOnlyHuman, formatCodesOnlyHuman } from './formatters/detail.js'
-import { formatSearchHuman } from './formatters/search.js'
-import { formatSchemaHuman, formatSchemaWithBackRefsHuman, formatSchemaNotFound } from './formatters/schema.js'
-import { formatSummaryHuman } from './formatters/summary.js'
+import { formatDetailHuman, formatParamsOnlyHuman, formatResponseOnlyHuman } from './formatters/detail.js'
+import { formatSearchAllHuman } from './formatters/search.js'
+import { formatSchemaWithBackRefsHuman, formatSchemaNotFound } from './formatters/schema.js'
 import {
-  formatListingLLM, formatListingBriefLLM, formatDetailLLM, formatParamsOnlyLLM, formatResponseOnlyLLM, formatCodesOnlyLLM,
-  formatSearchLLM, formatSchemaLLM, formatSchemaWithBackRefsLLM, formatSummaryLLM
+  formatListingLLM, formatListingBriefLLM, formatDetailLLM, formatParamsOnlyLLM, formatResponseOnlyLLM,
+  formatSearchAllLLM, formatSchemaWithBackRefsLLM
 } from './formatters/llm.js'
 import {
-  formatSchemaFieldSearch, formatEndpointFieldSearch
-} from './formatters/search-fields.js'
-import {
-  formatListingJSON, formatDetailJSON, formatSearchJSON,
-  formatSchemaJSON, formatSummaryJSON
+  formatListingJSON, formatDetailJSON,
+  formatSearchAllJSON, formatSchemaJSON
 } from './formatters/json.js'
+
+function resolveSpecPath(arg?: string): string {
+  if (arg) return arg
+  const env = process.env.OPENAPI_READER_SPEC
+  if (env) return env
+  const candidates = ['.openapi-reader.json', 'openapi-reader.json']
+  for (const f of candidates) {
+    const p = join(process.cwd(), f)
+    if (existsSync(p)) {
+      try {
+        const cfg = JSON.parse(readFileSync(p, 'utf-8'))
+        if (cfg.spec) return cfg.spec
+      } catch {
+      // ignore parse errors, fall through
+    }
+    }
+  }
+  console.error('Error: No spec provided. Pass a spec path, set OPENAPI_READER_SPEC, or create .openapi-reader.json with {"spec": "..."}')
+  process.exit(1)
+}
 
 const parser = new OpenApiParser()
 let query: QueryEngine | undefined
@@ -41,24 +59,7 @@ function getFormatterType(commandOptions: any): FormatType {
   return 'llm'
 }
 
-function estimateTokens(text: string): number {
-  return Math.ceil(text.length / 4)
-}
 
-function truncateToBudget(text: string, maxTokens: number): string {
-  const est = estimateTokens(text)
-  if (est <= maxTokens) return text
-
-  const result = text
-  const lines = result.split('\n')
-
-  const summaryLine = lines.slice(0, 3).join('\n')
-  if (estimateTokens(summaryLine) <= maxTokens) {
-    return summaryLine + `\n(truncated to ~${maxTokens} tokens)`
-  }
-
-  return `(truncated to ~${maxTokens} tokens - output too large)`
-}
 
 const program = new Command()
 
@@ -72,22 +73,15 @@ program
 program
   .command('ls')
   .description('List all endpoints grouped by tag')
-  .argument('<spec>', 'Path or URL to OpenAPI 3.0 spec')
+  .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
   .option('--tag <name>', 'Filter by tag (repeatable)', (val: string, prev: string[]) => prev.concat(val), [] as string[])
   .option('--path <keyword>', 'Filter by path (fuzzy match)')
   .option('--method <method>', 'Filter by HTTP method')
   .option('--deprecated', 'Show only deprecated endpoints')
   .option('--brief', 'Show method and path only (no descriptions)')
-  .option('--find <keyword>', 'Search endpoint parameter fields')
-  .action(async (spec: string, options: { tag?: string[]; path?: string; method?: string; deprecated?: boolean; brief?: boolean; find?: string }) => {
+  .action(async (spec: string | undefined, options: { tag?: string[]; path?: string; method?: string; deprecated?: boolean; brief?: boolean }) => {
     try {
-      const q = await ensureLoaded(spec)
-
-      if (options.find) {
-        const results = q.searchEndpointFields(options.find)
-        console.log(formatEndpointFieldSearch(results, options.find))
-        return
-      }
+      const q = await ensureLoaded(resolveSpecPath(spec))
 
       const endpoints = q.getEndpointSummary({
         tag: options.tag && options.tag.length > 0 ? options.tag : undefined,
@@ -96,16 +90,27 @@ program
         deprecated: options.deprecated || undefined,
       })
 
+      const summary = q.getApiSummary()
       const fmt = getFormatterType(options)
+      let listingOutput: string
       if (options.brief) {
-        console.log(fmt === 'human' ? formatListingBriefHuman(endpoints) : formatListingBriefLLM(endpoints))
+        listingOutput = fmt === 'human' ? formatListingBriefHuman(endpoints) : formatListingBriefLLM(endpoints)
       } else if (fmt === 'json') {
         console.log(formatListingJSON(endpoints))
+        return
       } else if (fmt === 'human') {
-        console.log(formatListingHuman(endpoints))
+        listingOutput = formatListingHuman(endpoints)
       } else {
-        console.log(formatListingLLM(endpoints))
+        listingOutput = formatListingLLM(endpoints)
       }
+
+      const headerItems = [
+        `${summary.title} v${summary.version}`,
+        `${summary.endpoints} endpoints`,
+        `Auth: ${summary.auth}`,
+        summary.servers.length > 0 ? summary.servers.join(', ') : null,
+      ].filter(Boolean).join(' | ')
+      console.log(`${headerItems}\n${listingOutput}`)
     } catch (err: any) {
       console.error(`Error: ${err.message}`)
       process.exit(1)
@@ -115,59 +120,142 @@ program
 program
   .command('get')
   .description('Get endpoint details')
-  .argument('<spec>', 'Path or URL to OpenAPI 3.0 spec')
-  .argument('<method>', 'HTTP method (GET, POST, PUT, DELETE, etc.)')
-  .argument('<path>', 'Endpoint path (e.g., /pets)')
+  .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
+  .argument('[method]', 'HTTP method (GET, POST, etc.). Omit to list all methods on the path.')
+  .argument('[path]', 'Endpoint path (e.g., /pets). Supports fuzzy matching if exact path not found.')
   .option('--params', 'Show only request parameters')
   .option('--response [code]', 'Show only response schemas, optionally filter by status code')
-  .option('--codes', 'Show only HTTP status codes')
   .option('--depth <n>', 'Nested field depth (default: unlimited)', parseInt)
-  .option('--max-tokens <n>', 'Approximate token budget for output', parseInt)
-  .action(async (spec: string, method: string, path: string, options: {
-    params?: boolean; response?: string | boolean; codes?: boolean;
-    depth?: number; maxTokens?: number; format?: string
+  .action(async (spec: string | undefined, method: string | undefined, path: string | undefined, options: {
+    params?: boolean; response?: string | boolean;
+    depth?: number; format?: string
   }) => {
     try {
-      const q = await ensureLoaded(spec)
+      const resolvedSpec = resolveSpecPath(spec)
+      const q = await ensureLoaded(resolvedSpec)
       const depth = options.depth ?? -1
-
       const fmt = getFormatterType(options)
 
-      if (options.params) {
-        const params = q.getEndpointParams(method, path, depth)
-        if (!params) { console.error(`Error: Endpoint ${method.toUpperCase()} ${path} not found`); process.exit(1) }
-        const detail = q.getEndpointDetail(method, path, depth)!
-        let output = fmt === 'llm' ? formatParamsOnlyLLM(detail) : formatParamsOnlyHuman(detail)
-        if (options.maxTokens) output = truncateToBudget(output, options.maxTokens)
-        console.log(output)
-      } else if (options.response !== undefined) {
-        const code = typeof options.response === 'string' ? options.response : undefined
-        const responses = q.getEndpointResponses(method, path, code, depth)
-        if (!responses || responses.length === 0) {
-          console.error(`Error: No responses found${code ? ` for code ${code}` : ''}`)
+      const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD', 'TRACE']
+      const isSpecProvided = spec !== undefined && (spec.startsWith('http://') || spec.startsWith('https://') || spec.endsWith('.yaml') || spec.endsWith('.yml') || spec.endsWith('.json') || spec.includes('/') && !spec.startsWith('/'))
+      let resolvedMethod = method
+      let resolvedPath = path
+      if (!isSpecProvided && spec) {
+        resolvedMethod = spec
+        resolvedPath = method
+      }
+
+      if (!resolvedMethod) {
+        console.error('Error: Specify a path, e.g. get /pets or get GET /pets')
+        process.exit(1)
+      }
+
+      const upperMethod = resolvedMethod.toUpperCase()
+
+      if (!resolvedPath) {
+        const inputPath = resolvedMethod.startsWith('/') ? resolvedMethod : `/${resolvedMethod}`
+        const matches = q.getMatchingEndpoints(inputPath)
+        if (matches.length === 0) {
+          console.error(`Error: No endpoints match "${inputPath}"`)
           process.exit(1)
         }
-        let output = fmt === 'llm' ? formatResponseOnlyLLM(method, path, responses) : formatResponseOnlyHuman(method, path, responses)
-        if (options.maxTokens) output = truncateToBudget(output, options.maxTokens)
-        console.log(output)
-      } else if (options.codes) {
-        const codes = q.getEndpointCodes(method, path)
-        if (!codes) { console.error('Error: No codes found'); process.exit(1) }
-        console.log(fmt === 'llm' ? formatCodesOnlyLLM(method, path, codes) : formatCodesOnlyHuman(method, path, codes))
-      } else {
-        const detail = q.getEndpointDetail(method, path, depth)
-        if (!detail) { console.error(`Error: Endpoint ${method.toUpperCase()} ${path} not found`); process.exit(1) }
-
-        if (fmt === 'json') {
-          console.log(formatDetailJSON(detail))
-        } else if (fmt === 'human') {
-          let output = formatDetailHuman(detail)
-          if (options.maxTokens) output = truncateToBudget(output, options.maxTokens)
-          console.log(output)
+        const pathGroup = new Map<string, typeof matches>()
+        for (const m of matches) {
+          if (!pathGroup.has(m.path)) pathGroup.set(m.path, [])
+          pathGroup.get(m.path)!.push(m)
+        }
+        if (pathGroup.size === 1) {
+          const [matchedPath, eps] = pathGroup.entries().next().value!
+          if (eps.length === 1) {
+            showEndpoint(q, eps[0].method, matchedPath, depth, options, fmt)
+          } else {
+            for (const ep of eps) {
+              showEndpoint(q, ep.method, matchedPath, depth, options, fmt)
+            }
+          }
         } else {
-          let output = formatDetailLLM(detail)
-          if (options.maxTokens) output = truncateToBudget(output, options.maxTokens)
-          console.log(output)
+          for (const [matchedPath, eps] of pathGroup) {
+            for (const ep of eps) {
+              console.log(`${ep.method} ${matchedPath}`)
+            }
+          }
+          console.error(`\nMultiple paths match "${inputPath}". Specify the full path.`)
+          process.exit(1)
+        }
+        return
+      }
+
+      const detail = q.getEndpointDetail(upperMethod, resolvedPath)
+      if (detail) {
+        showEndpoint(q, upperMethod, resolvedPath, depth, options, fmt)
+        return
+      }
+
+      if (httpMethods.includes(upperMethod)) {
+        const allOnPath = q.getEndpointPathsMatching(resolvedPath)
+        if (allOnPath.length > 0) {
+          if (allOnPath.length === 1) {
+            if (allOnPath[0].methods.length === 1) {
+              showEndpoint(q, allOnPath[0].methods[0], allOnPath[0].path, depth, options, fmt)
+            } else if (allOnPath[0].methods.includes(upperMethod)) {
+              showEndpoint(q, upperMethod, allOnPath[0].path, depth, options, fmt)
+            } else {
+              for (const m of allOnPath[0].methods) {
+                console.log(`${m} ${allOnPath[0].path}`)
+              }
+              console.error(`\n${upperMethod} ${resolvedPath} not found. Available on ${allOnPath[0].path}: ${allOnPath[0].methods.join(', ')}`)
+              process.exit(1)
+            }
+          } else {
+            for (const p of allOnPath) {
+              for (const m of p.methods) {
+                console.log(`${m} ${p.path}`)
+              }
+            }
+            console.error(`\n${upperMethod} ${resolvedPath} not found. Did you mean one of the above?`)
+            process.exit(1)
+          }
+        } else {
+          const suggestions = q.getMatchingEndpoints(resolvedPath)
+          if (suggestions.length > 0) {
+            console.error(`Endpoint ${upperMethod} ${resolvedPath} not found. Similar paths:`)
+            for (const s of suggestions) {
+              console.error(`  ${s.method} ${s.path}${s.summary ? '  ' + s.summary : ''}`)
+            }
+          } else {
+            console.error(`Error: Endpoint ${upperMethod} ${resolvedPath} not found`)
+          }
+          process.exit(1)
+        }
+      } else {
+        const inputPath = resolvedMethod.startsWith('/') ? resolvedMethod : `/${resolvedMethod}`
+        const matches = q.getMatchingEndpoints(inputPath)
+        if (matches.length === 0) {
+          console.error(`Error: No endpoints match "${inputPath}"`)
+          process.exit(1)
+        }
+        const pathGroup = new Map<string, typeof matches>()
+        for (const m of matches) {
+          if (!pathGroup.has(m.path)) pathGroup.set(m.path, [])
+          pathGroup.get(m.path)!.push(m)
+        }
+        if (pathGroup.size === 1) {
+          const [matchedPath, eps] = pathGroup.entries().next().value!
+          if (eps.length === 1) {
+            showEndpoint(q, eps[0].method, matchedPath, depth, options, fmt)
+          } else {
+            for (const ep of eps) {
+              showEndpoint(q, ep.method, matchedPath, depth, options, fmt)
+            }
+          }
+        } else {
+          for (const [matchedPath, eps] of pathGroup) {
+            for (const ep of eps) {
+              console.log(`${ep.method} ${matchedPath}`)
+            }
+          }
+          console.error(`\nMultiple paths match "${inputPath}". Specify the full path.`)
+          process.exit(1)
         }
       }
     } catch (err: any) {
@@ -176,22 +264,64 @@ program
     }
   })
 
+function showEndpoint(q: QueryEngine, method: string, path: string, depth: number, options: any, fmt: FormatType) {
+  if (options.params) {
+    const params = q.getEndpointParams(method, path, depth)
+    if (!params) { console.error(`Error: Endpoint ${method} ${path} not found`); process.exit(1) }
+    const detail = q.getEndpointDetail(method, path, depth)!
+    console.log(fmt === 'llm' ? formatParamsOnlyLLM(detail) : formatParamsOnlyHuman(detail))
+  } else if (options.response !== undefined) {
+    const code = typeof options.response === 'string' ? options.response : undefined
+    const responses = q.getEndpointResponses(method, path, code, depth)
+    if (!responses || responses.length === 0) {
+      console.error(`Error: No responses found${code ? ` for code ${code}` : ''}`)
+      process.exit(1)
+    }
+    console.log(fmt === 'llm' ? formatResponseOnlyLLM(method, path, responses) : formatResponseOnlyHuman(method, path, responses))
+  } else {
+    const detail = q.getEndpointDetail(method, path, depth)
+    if (!detail) { console.error(`Error: Endpoint ${method} ${path} not found`); process.exit(1) }
+
+    if (fmt === 'json') {
+      console.log(formatDetailJSON(detail))
+    } else if (fmt === 'human') {
+      console.log(formatDetailHuman(detail))
+    } else {
+      console.log(formatDetailLLM(detail))
+    }
+  }
+}
+
 program
   .command('search')
-  .description('Search endpoints by keyword')
-  .argument('<spec>', 'Path or URL to OpenAPI 3.0 spec')
-  .argument('<keyword>', 'Search keyword')
-  .action(async (spec: string, keyword: string) => {
+  .description('Search endpoints, schemas, and fields by keyword')
+  .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
+  .argument('[keyword]', 'Search keyword')
+  .action(async (spec: string | undefined, keyword: string | undefined) => {
     try {
-      const q = await ensureLoaded(spec)
-      const results = q.searchEndpoints(keyword)
+      let resolvedSpec: string
+      let resolvedKeyword: string
+      if (keyword) {
+        resolvedSpec = resolveSpecPath(spec)
+        resolvedKeyword = keyword
+      } else if (spec) {
+        resolvedSpec = resolveSpecPath(undefined)
+        resolvedKeyword = spec
+      } else {
+        console.error('Error: Search keyword is required')
+        process.exit(1)
+      }
+      const q = await ensureLoaded(resolvedSpec)
+      const endpoints = q.searchEndpoints(resolvedKeyword)
+      const schemaFields = q.searchFields(resolvedKeyword)
+      const endpointFields = q.searchEndpointFields(resolvedKeyword)
       const fmt = getFormatterType({})
       if (fmt === 'json') {
-        console.log(formatSearchJSON(results))
+        console.log(formatSearchAllJSON(endpoints, schemaFields, endpointFields))
       } else if (fmt === 'human') {
-        console.log(formatSearchHuman(results, keyword))
+        console.log(formatSearchAllHuman(endpoints, resolvedKeyword, schemaFields, endpointFields))
       } else {
-        console.log(formatSearchLLM(results, keyword))
+        console.log(formatSearchAllLLM(endpoints, resolvedKeyword, schemaFields, endpointFields))
       }
     } catch (err: any) {
       console.error(`Error: ${err.message}`)
@@ -202,30 +332,22 @@ program
 program
   .command('schema')
   .description('View a schema/model definition')
-  .argument('<spec>', 'Path or URL to OpenAPI 3.0 spec')
+  .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
   .argument('[name]', 'Schema name')
-  .option('--used-by', 'Show which endpoints use this schema')
   .option('--depth <n>', 'Nested field depth', parseInt)
-  .option('--find <keyword>', 'Search schema fields across all schemas')
-  .action(async (spec: string, name: string | undefined, options: { usedBy?: boolean; depth?: number; format?: string; find?: string }) => {
+  .action(async (spec: string | undefined, name: string | undefined, options: { depth?: number; format?: string }) => {
     try {
-      const q = await ensureLoaded(spec)
-
-      if (options.find) {
-        if (name) {
-          const results = q.searchFields(options.find)
-          const filtered = results.filter(r => r.schema === name)
-          console.log(formatSchemaFieldSearch(filtered, options.find))
-        } else {
-          const results = q.searchFields(options.find)
-          console.log(formatSchemaFieldSearch(results, options.find))
-        }
-        return
-      }
+      const q = await ensureLoaded(resolveSpecPath(spec))
 
       if (!name) {
-        console.error('Error: Schema name is required without --find')
-        process.exit(1)
+        const names = q.getSchemaNames()
+        const fmt = getFormatterType(options)
+        if (fmt === 'json') {
+          console.log(JSON.stringify(names, null, 2))
+        } else {
+          console.log(names.join('\n'))
+        }
+        return
       }
 
       const depth = options.depth ?? -1
@@ -237,46 +359,14 @@ program
       }
 
       const fmt = getFormatterType(options)
+      const backRefs = q.getSchemaBackRefs(name)
 
-      if (options.usedBy) {
-        const backRefs = q.getSchemaBackRefs(name)
-        if (fmt === 'json') {
-          console.log(formatSchemaJSON(schema, backRefs))
-        } else if (fmt === 'human') {
-          console.log(formatSchemaWithBackRefsHuman(schema, backRefs))
-        } else {
-          console.log(formatSchemaWithBackRefsLLM(schema, backRefs))
-        }
-      } else {
-        if (fmt === 'json') {
-          console.log(formatSchemaJSON(schema))
-        } else if (fmt === 'human') {
-          console.log(formatSchemaHuman(schema))
-        } else {
-          console.log(formatSchemaLLM(schema))
-        }
-      }
-    } catch (err: any) {
-      console.error(`Error: ${err.message}`)
-      process.exit(1)
-    }
-  })
-
-program
-  .command('summary')
-  .description('Show API overview')
-  .argument('<spec>', 'Path or URL to OpenAPI 3.0 spec')
-  .action(async (spec: string, options: { format?: string }) => {
-    try {
-      const q = await ensureLoaded(spec)
-      const summary = q.getApiSummary()
-      const fmt = getFormatterType(options)
       if (fmt === 'json') {
-        console.log(formatSummaryJSON(summary))
+        console.log(formatSchemaJSON(schema, backRefs))
       } else if (fmt === 'human') {
-        console.log(formatSummaryHuman(summary))
+        console.log(formatSchemaWithBackRefsHuman(schema, backRefs))
       } else {
-        console.log(formatSummaryLLM(summary))
+        console.log(formatSchemaWithBackRefsLLM(schema, backRefs))
       }
     } catch (err: any) {
       console.error(`Error: ${err.message}`)
@@ -325,7 +415,7 @@ function prepareArgv(argv: string[]): string[] {
   }
 
   const newArgv = [...argv]
-  newArgv.splice(firstPosIdx, 0, 'summary')
+  newArgv.splice(firstPosIdx, 0, 'ls')
   return newArgv
 }
 

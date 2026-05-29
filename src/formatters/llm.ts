@@ -6,7 +6,9 @@ function fmtFieldLLM(field: FieldInfo, indent = 0): string {
   const req = field.required ? 'req' : 'opt'
   const type = fmtType(field)
   const desc = field.description ? `  ${truncateDesc(field.description)}` : ''
-  return `${pad}- ${field.name}: ${type}, ${req}${desc}`
+  const def = field.defaultValue ? `  =${field.defaultValue}` : ''
+  const ex = field.example ? `  eg:${field.example}` : ''
+  return `${pad}- ${field.name}: ${type}, ${req}${desc}${def}${ex}`
 }
 
 function fmtFieldsLLM(fields: FieldInfo[], indent = 0): string {
@@ -17,9 +19,12 @@ function fmtFieldsLLM(fields: FieldInfo[], indent = 0): string {
       lines.push(`${'  '.repeat(indent)}- ${field.name}: ${field.type} (oneOf)`)
       for (const variants of field.oneOf) {
         const label = variants.find(v => v.name === 'type' && v.enumValues)?.enumValues?.[0]
+        if (label) {
+          lines.push(`${'  '.repeat(indent + 1)}- ${label}:`)
+        }
         for (const v of variants) {
           if (v.name === 'type') continue
-          lines.push(fmtFieldLLM(v, indent + 2))
+          lines.push(fmtFieldLLM(v, label ? indent + 2 : indent + 1))
         }
       }
     } else if (field.children && field.children.length > 0) {
@@ -261,6 +266,54 @@ export function formatSchemaWithBackRefsLLM(schema: SchemaInfo, backRefs: BackRe
   }
 
   return lines.join('\n')
+}
+
+export function formatSearchAllLLM(
+  endpoints: EndpointSummary[],
+  keyword: string,
+  schemaFields: { schema: string; fields: FieldInfo[] }[],
+  endpointFields: { method: string; path: string; fields: FieldInfo[] }[]
+): string {
+  const sections: string[] = []
+  sections.push(`## Search: "${keyword}"`)
+
+  if (endpoints.length > 0) {
+    sections.push('')
+    sections.push('### Endpoints')
+    for (const ep of endpoints) {
+      const summary = ep.summary ? `  ${ep.summary}` : ''
+      const depMark = ep.deprecated ? ' [DEPRECATED]' : ''
+      sections.push(`${ep.method} ${ep.path}${depMark}${summary}`)
+    }
+  }
+
+  if (schemaFields.length > 0) {
+    sections.push('')
+    sections.push('### Schema Fields')
+    for (const r of schemaFields) {
+      sections.push(`**${r.schema}**`)
+      for (const f of r.fields) {
+        sections.push(`  - ${f.name}: ${fmtType(f)}, ${f.required ? 'req' : 'opt'}${f.description ? `  ${truncateDesc(f.description)}` : ''}`)
+      }
+    }
+  }
+
+  if (endpointFields.length > 0) {
+    sections.push('')
+    sections.push('### Endpoint Fields')
+    for (const r of endpointFields) {
+      sections.push(`**${r.method} ${r.path}**`)
+      for (const f of r.fields) {
+        sections.push(`  - ${f.name}: ${fmtType(f)}, ${f.required ? 'req' : 'opt'}${f.description ? `  ${truncateDesc(f.description)}` : ''}`)
+      }
+    }
+  }
+
+  if (endpoints.length === 0 && schemaFields.length === 0 && endpointFields.length === 0) {
+    sections.push(`No results matching "${keyword}"`)
+  }
+
+  return sections.join('\n')
 }
 
 export function formatSummaryLLM(summary: ApiSummary): string {

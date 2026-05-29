@@ -23,10 +23,28 @@ npm install -g openapi-reader
 openapi-reader [spec] <command> [options]
 ```
 
+## Spec 来源
+
+`<spec>` 参数可选，按以下优先级解析：
+
+1. CLI 参数（如提供）
+2. 环境变量 `OPENAPI_READER_SPEC`
+3. 当前目录的 `.openapi-reader.json` 或 `openapi-reader.json`（含 `{"spec": "..."}`）
+
+```bash
+# 环境变量
+export OPENAPI_READER_SPEC=https://api.example.com/openapi.json
+openapi-reader ls
+
+# 配置文件
+echo '{"spec":"openapi.yaml"}' > .openapi-reader.json
+openapi-reader ls
+```
+
 ## 全局选项
 
 ```
---format <type>  Output format: text or json (default: text)
+--format <type>  Output format: llm, human (or text), json (default: llm)
 --no-cache      Skip cache for remote specs
 ```
 
@@ -34,11 +52,7 @@ openapi-reader [spec] <command> [options]
 
 ### `ls` — List all endpoints grouped by tag
 
-`openapi-reader <spec> ls [--tag] [--path] [--method] [--deprecated] [--brief] [--find]`
-
-**参数:**
-
-- `<spec>` Path or URL to OpenAPI 3.0 spec
+`openapi-reader ls [--tag] [--path] [--method] [--deprecated] [--brief]`
 
 **选项:**
 
@@ -47,63 +61,35 @@ openapi-reader [spec] <command> [options]
 - `--method <method>` Filter by HTTP method
 - `--deprecated` Show only deprecated endpoints
 - `--brief` Show method and path only (no descriptions)
-- `--find <keyword>` Search endpoint parameter fields
 
 ### `get` — Get endpoint details
 
-`openapi-reader <spec> get <method> <path> [--params] [--response] [--codes] [--depth] [--max-tokens]`
-
-**参数:**
-
-- `<spec>` Path or URL to OpenAPI 3.0 spec
-- `<method>` HTTP method (GET, POST, PUT, DELETE, etc.)
-- `<path>` Endpoint path (e.g., /pets)
+`openapi-reader get [--params] [--response] [--depth]`
 
 **选项:**
 
 - `--params` Show only request parameters
 - `--response [code]` Show only response schemas, optionally filter by status code
-- `--codes` Show only HTTP status codes
 - `--depth <n>` Nested field depth (default: unlimited)
-- `--max-tokens <n>` Approximate token budget for output
 
-### `search` — Search endpoints by keyword
+### `search` — Search endpoints, schemas, and fields by keyword
 
-`openapi-reader <spec> search <keyword>`
-
-**参数:**
-
-- `<spec>` Path or URL to OpenAPI 3.0 spec
-- `<keyword>` Search keyword
+`openapi-reader search`
 
 ### `schema` — View a schema/model definition
 
-`openapi-reader <spec> schema [--used-by] [--depth] [--find]`
-
-**参数:**
-
-- `<spec>` Path or URL to OpenAPI 3.0 spec
+`openapi-reader schema [--depth]`
 
 **选项:**
 
-- `--used-by` Show which endpoints use this schema
 - `--depth <n>` Nested field depth
-- `--find <keyword>` Search schema fields across all schemas
-
-### `summary` — Show API overview
-
-`openapi-reader <spec> summary`
-
-**参数:**
-
-- `<spec>` Path or URL to OpenAPI 3.0 spec
 
 
 ## 示例
 
 ```bash
-# 查看 API 概览
-openapi-reader https://api.example.com/openapi.json
+# 概览与端点列表（一行显示标题/端点数/认证/服务器）
+openapi-reader https://api.example.com/openapi.json ls
 
 # 列出所有端点
 openapi-reader spec.yaml ls
@@ -111,8 +97,11 @@ openapi-reader spec.yaml ls
 # 按 tag 过滤端点
 openapi-reader spec.yaml ls --tag users --tag admin
 
-# 按 URL 路径模糊搜索
-openapi-reader spec.yaml ls --url pet
+# 按路径模糊搜索
+openapi-reader spec.yaml ls --path pet
+
+# 只看端点列表（无描述）
+openapi-reader spec.yaml ls --brief
 
 # 查看端点详情（含参数和响应）
 openapi-reader spec.yaml get POST /users
@@ -123,42 +112,38 @@ openapi-reader spec.yaml get POST /users --params
 # 只看响应（指定状态码）
 openapi-reader spec.yaml get POST /users --response 201
 
-# 搜索端点
+# 全局搜索：端点 + schema 字段 + 端点字段
 openapi-reader spec.yaml search user
 
-# 查看数据模型
+# 查看数据模型（自动显示引用来源）
 openapi-reader spec.yaml schema User
 
-# 查看哪些端点使用了某个模型
-openapi-reader spec.yaml schema User --used-by
+# 列出所有数据模型名称
+openapi-reader spec.yaml schema
+
+# 只传路径查看该路径所有方法
+openapi-reader spec.yaml get /users
+
+# 路径模糊匹配（无需前导 /）
+openapi-reader spec.yaml get POST pets
 
 # 限制嵌套展开深度（节省 token）
 openapi-reader spec.yaml get POST /users --depth 1
 
-# 限制输出 token 预算
-openapi-reader spec.yaml get POST /users --max-tokens 500
-
 # JSON 格式输出
-openapi-reader spec.yaml --format json
+openapi-reader spec.yaml ls --format json
 ```
 
 ## 输出格式
 
-所有命令默认输出格式化文本（适合终端阅读），加 `--format json` 输出 JSON。
+所有命令默认输出 LLM 优化格式，加 `--format human` 输出终端友好文本，加 `--format json` 输出 JSON。
 
 ### 文本输出示例
 
 ```
-# summary
-Pet Store API v1.0
+# ls (按 tag 分组，顶部概览)
+Pet Store API v1.0 | 42 endpoints | Auth: Bearer token
 ────────────────────────────────────────────────
-Endpoints:  42
-Tags:       pets (12), users (8), store (22)
-Auth:       Bearer token (Authorization header)
-Servers:    https://api.example.com
-Models:     15
-
-# ls (按 tag 分组)
 pets:
   GET    /pets          List all pets
   POST   /pets          Create a pet
@@ -184,12 +169,20 @@ Responses:
   400  Bad request
   404  Not found
 
-# search
+# search (按类别分组)
 Search results for "user":
 
+Endpoints:
   GET    /users         List users
   POST   /users         Create user
-  GET    /users/{id}    Get user by ID
+
+Schema Fields:
+  User
+    email: string, req  Email address
+
+Endpoint Fields:
+  POST /users
+    email: string, req  Email address
 
 # schema
 User
@@ -198,6 +191,10 @@ User
   name                 string     ✱  Full name
   email                string     ✱  Email address
   role                 string        User role
+
+Used by:
+  GET /users  (response 200)
+  POST /users  (request body)
 ```
 
 ### JSON 输出示例
@@ -218,9 +215,14 @@ User
 
 ## 与 LLM 配合使用
 
-- 用 `openapi-reader spec.yaml` 快速了解 API（默认为 summary）
-- 用 `--url` 按路径过滤端点（支持模糊匹配）
+- 用 `openapi-reader spec.yaml ls` 快速了解 API 全貌（标题/端点数/认证/服务器 + 端点列表）
+- 用 `--path` 按路径过滤端点（支持模糊匹配）
 - 用 `--depth 1` 限制嵌套深度，减少 token 消耗
-- 用 `--max-tokens 500` 控制输出长度
 - 用 `--format json` 输出结构化数据便于程序处理
-- `get` 命令支持 `--params`、`--response [code]`、`--codes` 子视图，只获取需要的信息
+- `get` 命令支持 `--params`、`--response [code]` 子视图，只获取需要的信息
+- `get` 支持路径模糊匹配，传 POST pets 无需前导 /`
+- `search` 一次搜索所有来源：端点、schema 字段、端点参数字段，按类别分组输出
+- `schema` 自动显示 back references（哪些端点使用该模型）
+- `schema` 不传名称时列出所有模型名称，便于发现和导航
+- spec 参数可选，支持环境变量和配置文件
+- 输出中的 `→ SchemaName` 表示可进一步查询的模型引用

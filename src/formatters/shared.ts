@@ -15,6 +15,7 @@ function fmtType(field: FieldInfo): string {
       ? field.enumValues.join(' | ')
       : `${field.enumValues[0]} | ...`
   }
+  if (field.ref && !field.children?.length) return field.type === field.ref ? `→ ${field.ref}` : `${field.type} → ${field.ref}`
   return field.type
 }
 
@@ -27,7 +28,9 @@ function fmtField(field: FieldInfo, indent = 2): string {
   const type = fmtType(field)
   const req = fmtRequired(field)
   const desc = field.description ? `  ${truncateDesc(field.description)}` : ''
-  return `${pad}${field.name.padEnd(18)} ${type.padEnd(12)}${req}${desc}`
+  const def = field.defaultValue ? `  =${field.defaultValue}` : ''
+  const ex = field.example ? `  eg:${field.example}` : ''
+  return `${pad}${field.name.padEnd(18)} ${type.padEnd(12)}${req}${desc}${def}${ex}`
 }
 
 export function fmtFields(fields: FieldInfo[], indent = 2): string {
@@ -43,7 +46,9 @@ export function fmtFields(fields: FieldInfo[], indent = 2): string {
         lines.push(`${' '.repeat(indent + 2)}${label}:`)
         for (const v of vars) {
           if (v.name === 'type') continue
-          lines.push(`${' '.repeat(indent + 4)}${v.name.padEnd(18)} ${fmtType(v).padEnd(12)}${fmtRequired(v)}${v.description ? `  ${truncateDesc(v.description)}` : ''}`)
+          const vDef = v.defaultValue ? `  =${v.defaultValue}` : ''
+          const vEx = v.example ? `  eg:${v.example}` : ''
+          lines.push(`${' '.repeat(indent + 4)}${v.name.padEnd(18)} ${fmtType(v).padEnd(12)}${fmtRequired(v)}${v.description ? `  ${truncateDesc(v.description)}` : ''}${vDef}${vEx}`)
         }
         idx++
       }

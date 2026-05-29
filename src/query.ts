@@ -5,6 +5,8 @@ import type {
   ParamSection, ResponseInfo, ApiSummary, SchemaInfo, BackRef
 } from './types.js'
 
+const KNOWN_TYPES = new Set(['int', 'bool', 'string', 'datetime', 'binary', 'array', 'object', 'oneOf', 'anyOf', 'any'])
+
 function getTypeString(schema: OpenAPIV3.SchemaObject): string {
   if (schema.oneOf && schema.oneOf.length > 0) return 'oneOf'
   if (schema.anyOf && schema.anyOf.length > 0) return 'anyOf'
@@ -95,6 +97,7 @@ function schemaToFields(
   return Object.entries(resolved.properties).map(([name, prop]) => {
     const propSchema = prop as OpenAPIV3.SchemaObject
     const typeStr = getTypeString(propSchema)
+    const isKnownType = KNOWN_TYPES.has(typeStr) || typeStr.endsWith('[]')
     const field: FieldInfo = {
       name,
       type: typeStr,
@@ -102,6 +105,9 @@ function schemaToFields(
       readOnly: propSchema.readOnly ?? false,
       description: propSchema.description ?? '',
       enumValues: propSchema.enum as string[] | undefined,
+      defaultValue: propSchema.default != null ? String(propSchema.default) : undefined,
+      example: propSchema.example != null ? String(propSchema.example) : undefined,
+      ref: isKnownType ? undefined : typeStr,
     }
 
     if (propSchema.oneOf && propSchema.oneOf.length > 0) {
@@ -129,6 +135,10 @@ function schemaToFields(
 
     if (propSchema.type === 'object' && !propSchema.properties) {
       field.ref = propSchema.title ?? undefined
+    }
+
+    if (!canExpand && !field.children && propSchema.properties && propSchema.title) {
+      field.ref = propSchema.title
     }
 
     return field
@@ -194,6 +204,56 @@ export class QueryEngine {
     }))
   }
 
+  getMatchingEndpoints(inputPath: string): EndpointSummary[] {
+    const normalized = inputPath.toLowerCase().replace(/\/+$/, '')
+    const exact = this.parser.getAllOperations().filter(op => op.path.toLowerCase() === normalized)
+    if (exact.length > 0) {
+      return exact.map(op => ({
+        method: op.method, path: op.path, summary: op.summary,
+        tags: op.tags.length > 0 ? op.tags : ['Other'],
+        deprecated: op.deprecated ?? false,
+      }))
+    }
+    const segments = normalized.split('/')
+    const fuzzy = this.parser.getAllOperations().filter(op => {
+      const opLower = op.path.toLowerCase()
+      if (opLower.includes(normalized)) return true
+      if (normalized.includes(opLower)) return true
+      const opSegs = opLower.split('/')
+      return segments.every(s => s === '' || opSegs.some(os => os.includes(s)))
+    })
+    return fuzzy.map(op => ({
+      method: op.method, path: op.path, summary: op.summary,
+      tags: op.tags.length > 0 ? op.tags : ['Other'],
+      deprecated: op.deprecated ?? false,
+    }))
+  }
+
+  getEndpointPathsMatching(inputPath: string): { path: string; methods: string[] }[] {
+    const normalized = inputPath.toLowerCase().replace(/\/+$/, '')
+    const withSlash = normalized.startsWith('/') ? normalized : `/${normalized}`
+    const allOps = this.parser.getAllOperations()
+    const exactMatch = allOps.filter(op => op.path.toLowerCase() === withSlash)
+    if (exactMatch.length > 0) {
+      const map = new Map<string, string[]>()
+      for (const op of exactMatch) {
+        if (!map.has(op.path)) map.set(op.path, [])
+        map.get(op.path)!.push(op.method)
+      }
+      return [...map.entries()].map(([path, methods]) => ({ path, methods }))
+    }
+    const fuzzy = allOps.filter(op => op.path.toLowerCase().includes(normalized) || normalized.includes(op.path.toLowerCase()))
+    if (fuzzy.length > 0) {
+      const map = new Map<string, string[]>()
+      for (const op of fuzzy) {
+        if (!map.has(op.path)) map.set(op.path, [])
+        map.get(op.path)!.push(op.method)
+      }
+      return [...map.entries()].map(([path, methods]) => ({ path, methods }))
+    }
+    return []
+  }
+
   getEndpointDetail(method: string, path: string, depth = -1): EndpointDetail | undefined {
     const op = this.parser.getOperation(method, path)
     if (!op) return undefined
@@ -240,6 +300,10 @@ export class QueryEngine {
     const op = this.parser.getOperation(method, path)
     if (!op) return undefined
     return this.extractCodes(op)
+  }
+
+  getSchemaNames(): string[] {
+    return Object.keys(this.parser.getAllSchemas())
   }
 
   getSchema(name: string, depth = -1): SchemaInfo | undefined {
@@ -400,6 +464,8 @@ export class QueryEngine {
         required: param.required ?? false,
         description: param.description ?? '',
         enumValues: schema.enum as string[] | undefined,
+        defaultValue: schema.default != null ? String(schema.default) : undefined,
+        example: schema.example != null ? String(schema.example) : undefined,
       }
 
       if (param.in === 'path') pathParams.push(field)

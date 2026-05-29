@@ -35,6 +35,7 @@ export interface OperationInfo {
   method: HttpMethod
   summary: string
   description: string
+  operationId: string
   tags: string[]
   parameters: OpenAPIV3.ParameterObject[]
   requestBody: OpenAPIV3.RequestBodyObject | undefined
@@ -219,6 +220,7 @@ export class OpenApiParser {
           method: method.toUpperCase() as HttpMethod,
           summary: operation.summary ?? '',
           description: operation.description ?? '',
+          operationId: operation.operationId ?? '',
           tags: operation.tags ?? [],
           parameters: allParams,
           requestBody: operation.requestBody as OpenAPIV3.RequestBodyObject | undefined,
@@ -284,6 +286,8 @@ export class OpenApiParser {
       if (op.summary.toLowerCase().includes(lower)) return true
       if (op.description.toLowerCase().includes(lower)) return true
       if (op.tags.some(t => t.toLowerCase().includes(lower))) return true
+      if (op.operationId && op.operationId.toLowerCase().includes(lower)) return true
+      if (op.parameters.some(p => p.name.toLowerCase().includes(lower))) return true
       return false
     })
   }

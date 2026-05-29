@@ -13,6 +13,8 @@ function fieldToJSON(f: FieldInfo): any {
   if (f.enumValues) obj.enum = f.enumValues
   if (f.readOnly) obj.readOnly = true
   if (f.ref) obj.ref = f.ref
+  if (f.defaultValue != null) obj.default = f.defaultValue
+  if (f.example != null) obj.example = f.example
   if (f.children && f.children.length > 0) obj.children = f.children.map(fieldToJSON)
   if (f.oneOf) {
     obj.oneOf = f.oneOf.map(variants => variants.map(fieldToJSON))
@@ -72,6 +74,35 @@ export function formatDetailJSON(detail: EndpointDetail): string {
 
 export function formatSearchJSON(results: EndpointSummary[]): string {
   return formatListingJSON(results)
+}
+
+export function formatSearchAllJSON(
+  endpoints: EndpointSummary[],
+  schemaFields: { schema: string; fields: FieldInfo[] }[],
+  endpointFields: { method: string; path: string; fields: FieldInfo[] }[]
+): string {
+  const obj: any = {}
+
+  if (endpoints.length > 0) {
+    obj.endpoints = JSON.parse(formatListingJSON(endpoints))
+  }
+
+  if (schemaFields.length > 0) {
+    obj.schemaFields = schemaFields.map(r => ({
+      schema: r.schema,
+      fields: r.fields.map(fieldToJSON),
+    }))
+  }
+
+  if (endpointFields.length > 0) {
+    obj.endpointFields = endpointFields.map(r => ({
+      method: r.method,
+      path: r.path,
+      fields: r.fields.map(fieldToJSON),
+    }))
+  }
+
+  return JSON.stringify(obj, null, 2)
 }
 
 export function formatSchemaJSON(schema: SchemaInfo, backRefs?: BackRef[]): string {

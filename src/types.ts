@@ -17,6 +17,8 @@ export interface FieldInfo {
   oneOf?: FieldInfo[][]
   items?: FieldInfo
   children?: FieldInfo[]
+  defaultValue?: string
+  example?: string
 }
 
 export interface ParamSection {
