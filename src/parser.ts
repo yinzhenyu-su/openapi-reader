@@ -14,20 +14,22 @@ function getCachePath(specPath: string): string | null {
   return join(cacheDir, `${hash}.json`)
 }
 
-function isCachedValid(cachePath: string): boolean {
-  if (!existsSync(cachePath)) return false
-  const stat = existsSync(cachePath) ? readFileSync(cachePath, 'utf-8') : null
-  if (!stat) return false
+function loadCached(cachePath: string): OpenAPIV3.Document | null {
+  if (!existsSync(cachePath)) return null
   try {
-    const meta = JSON.parse(readFileSync(cachePath, 'utf-8'))
-    if (meta._cachedAt) {
-      const age = Date.now() - meta._cachedAt
-      return age < 3600_000
+    const raw = JSON.parse(readFileSync(cachePath, 'utf-8'))
+    if (raw._cachedAt) {
+      const age = Date.now() - raw._cachedAt
+      if (age < 3600_000) {
+        delete raw._cachedAt
+        delete raw._source
+        return raw as OpenAPIV3.Document
+      }
     }
   } catch {
     // ignore parse error
   }
-  return false
+  return null
 }
 
 export interface OperationInfo {
@@ -88,15 +90,11 @@ export class OpenApiParser {
   async load(specPath: string, noCache = false): Promise<void> {
     const cachePath = getCachePath(specPath)
 
-    if (cachePath && !noCache && isCachedValid(cachePath)) {
-      try {
-        const cached = JSON.parse(readFileSync(cachePath, 'utf-8'))
-        delete cached._cachedAt
-        delete cached._source
-        this.doc = cached as OpenAPIV3.Document
+    if (cachePath && !noCache) {
+      const cached = loadCached(cachePath)
+      if (cached) {
+        this.doc = cached
         return
-      } catch {
-        // ignore parse error
       }
     }
 

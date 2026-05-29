@@ -429,9 +429,22 @@ program
   .argument('[name]', 'Schema name')
   .action(async (spec: string | undefined, name: string | undefined, options: { format?: string }) => {
     try {
-      const q = await ensureLoaded(resolveSpecPath(spec))
+      let resolvedSpec: string
+      let resolvedName: string | undefined
+      const isSpecLike = spec ? (spec.startsWith('http://') || spec.startsWith('https://') || spec.endsWith('.yaml') || spec.endsWith('.yml') || spec.endsWith('.json')) : false
+      if (name) {
+        resolvedSpec = resolveSpecPath(spec)
+        resolvedName = name
+      } else if (spec && !isSpecLike) {
+        resolvedSpec = resolveSpecPath(undefined)
+        resolvedName = spec
+      } else {
+        resolvedSpec = resolveSpecPath(spec)
+        resolvedName = undefined
+      }
+      const q = await ensureLoaded(resolvedSpec)
 
-      if (!name) {
+      if (!resolvedName) {
         const schemas = q.getSchemaList()
         const fmt = getFormatterType(options)
         if (fmt === 'json') {
@@ -445,37 +458,37 @@ program
         return
       }
 
-      let schema = q.getSchema(name)
-      let resolvedName = name
+      let schema = q.getSchema(resolvedName)
+      let finalName = resolvedName
 
       if (!schema) {
         const available = q.getSchemaNames()
-        const lower = name.toLowerCase()
+        const lower = resolvedName.toLowerCase()
         const caseMatch = available.find(n => n.toLowerCase() === lower)
         if (caseMatch) {
           schema = q.getSchema(caseMatch)
-          resolvedName = caseMatch
+          finalName = caseMatch
         } else {
           const substringMatches = available.filter(n => n.toLowerCase().includes(lower))
           if (substringMatches.length === 1) {
             schema = q.getSchema(substringMatches[0])
-            resolvedName = substringMatches[0]
+            finalName = substringMatches[0]
           } else if (substringMatches.length > 1) {
-            console.error(`Schema "${name}" matches multiple schemas:`)
+            console.error(`Schema "${resolvedName}" matches multiple schemas:`)
             for (const m of substringMatches) {
               console.error(`  ${m}`)
             }
             console.error(`Specify the exact name.`)
             process.exit(1)
           } else {
-            console.error(formatSchemaNotFound(name, available))
+            console.error(formatSchemaNotFound(resolvedName, available))
             process.exit(1)
           }
         }
       }
 
       const fmt = getFormatterType(options)
-      const backRefs = q.getSchemaBackRefs(resolvedName)
+      const backRefs = q.getSchemaBackRefs(finalName)
 
       if (fmt === 'json') {
         console.log(formatSchemaJSON(schema!, backRefs))
