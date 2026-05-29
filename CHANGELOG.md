@@ -1,3 +1,13 @@
+## [0.5.2](https://github.com/yinzhenyu-su/openapi-reader/compare/v0.5.1...v0.5.2) (2026-05-29)
+
+
+### Bug Fixes
+
+* change prepublishOnly from generate:skill to build ([19f5021](https://github.com/yinzhenyu-su/openapi-reader/commit/19f50213a4ff6426e8fe4572ddd56d29902980ab))
+* replace sed version bump with generate:skill in release pipeline ([f2d3c30](https://github.com/yinzhenyu-su/openapi-reader/commit/f2d3c308b2f30d006b55a1b3128ad73e454dbd2c))
+* resolve multiple code quality issues from review ([4c3843b](https://github.com/yinzhenyu-su/openapi-reader/commit/4c3843b7fc1ffee9ab0a8f3deb807cfade53c3a6))
+* rewrite generate script to produce strategy-focused SKILL.md ([0168bd0](https://github.com/yinzhenyu-su/openapi-reader/commit/0168bd0616bed2566fe0b8feaa3290734db1a557))
+
 ## [0.5.1](https://github.com/yinzhenyu-su/openapi-reader/compare/v0.5.0...v0.5.1) (2026-05-29)
 
 
