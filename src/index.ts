@@ -65,7 +65,7 @@ const program = new Command()
 
 program
   .name('openapi-reader')
-  .description('CLI tool for LLM-friendly OpenAPI document querying')
+  .description('CLI tool for LLM-friendly OpenAPI document querying. Omitting the command defaults to \'ls\'.')
   .version('0.1.0')
   .option('--format <type>', 'Output format: llm, human (or text), json', 'llm')
   .option('--no-cache', 'Skip cache for remote specs')
@@ -444,7 +444,9 @@ function prepareArgv(argv: string[]): string[] {
     return newArgv
   }
 
-  return argv
+  const newArgv = [...argv]
+  newArgv.splice(firstPosIdx, 0, 'ls')
+  return newArgv
 }
 
 program.parse(prepareArgv(process.argv))
