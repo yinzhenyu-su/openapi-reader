@@ -169,9 +169,7 @@ program
           if (eps.length === 1) {
             showEndpoint(q, eps[0].method, matchedPath, depth, options, fmt)
           } else {
-            for (const ep of eps) {
-              showEndpoint(q, ep.method, matchedPath, depth, options, fmt)
-            }
+            showMultiEndpoints(q, eps, matchedPath, depth, options, fmt)
           }
         } else {
           for (const [matchedPath, eps] of pathGroup) {
@@ -244,9 +242,7 @@ program
           if (eps.length === 1) {
             showEndpoint(q, eps[0].method, matchedPath, depth, options, fmt)
           } else {
-            for (const ep of eps) {
-              showEndpoint(q, ep.method, matchedPath, depth, options, fmt)
-            }
+            showMultiEndpoints(q, eps, matchedPath, depth, options, fmt)
           }
         } else {
           for (const [matchedPath, eps] of pathGroup) {
@@ -263,6 +259,11 @@ program
       process.exit(1)
     }
   })
+
+function hasResponses(q: QueryEngine, method: string, path: string, code: string | undefined, depth: number): boolean {
+  const responses = q.getEndpointResponses(method, path, code, depth)
+  return responses ? responses.length > 0 : false
+}
 
 function showEndpoint(q: QueryEngine, method: string, path: string, depth: number, options: any, fmt: FormatType) {
   if (options.params) {
@@ -292,6 +293,31 @@ function showEndpoint(q: QueryEngine, method: string, path: string, depth: numbe
   }
 }
 
+function showMultiEndpoints(
+  q: QueryEngine,
+  eps: { method: string; path: string }[],
+  path: string,
+  depth: number,
+  options: any,
+  fmt: FormatType
+) {
+  if (options.response !== undefined) {
+    const code = typeof options.response === 'string' ? options.response : undefined
+    const filtered = eps.filter(ep => hasResponses(q, ep.method, path, code, depth))
+    if (filtered.length === 0) {
+      console.error(`Error: No responses found${code ? ` for code ${code}` : ''}`)
+      process.exit(1)
+    }
+    for (const ep of filtered) {
+      showEndpoint(q, ep.method, path, depth, options, fmt)
+    }
+    return
+  }
+  for (const ep of eps) {
+    showEndpoint(q, ep.method, path, depth, options, fmt)
+  }
+}
+
 program
   .command('search')
   .description('Search endpoints, schemas, and fields by keyword')
@@ -301,10 +327,11 @@ program
     try {
       let resolvedSpec: string
       let resolvedKeyword: string
+      const isSpecLike = spec ? (spec.startsWith('http://') || spec.startsWith('https://') || spec.endsWith('.yaml') || spec.endsWith('.yml') || spec.endsWith('.json')) : false
       if (keyword) {
         resolvedSpec = resolveSpecPath(spec)
         resolvedKeyword = keyword
-      } else if (spec) {
+      } else if (spec && !isSpecLike) {
         resolvedSpec = resolveSpecPath(undefined)
         resolvedKeyword = spec
       } else {
@@ -340,12 +367,15 @@ program
       const q = await ensureLoaded(resolveSpecPath(spec))
 
       if (!name) {
-        const names = q.getSchemaNames()
+        const schemas = q.getSchemaList()
         const fmt = getFormatterType(options)
         if (fmt === 'json') {
-          console.log(JSON.stringify(names, null, 2))
+          console.log(JSON.stringify(schemas, null, 2))
         } else {
-          console.log(names.join('\n'))
+          for (const s of schemas) {
+            const desc = s.description ? `  ${s.description}` : ''
+            console.log(`${s.name}${desc}`)
+          }
         }
         return
       }
@@ -414,9 +444,7 @@ function prepareArgv(argv: string[]): string[] {
     return newArgv
   }
 
-  const newArgv = [...argv]
-  newArgv.splice(firstPosIdx, 0, 'ls')
-  return newArgv
+  return argv
 }
 
 program.parse(prepareArgv(process.argv))

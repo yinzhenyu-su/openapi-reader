@@ -102,7 +102,7 @@ function schemaToFields(
       name,
       type: typeStr,
       required: requiredSet.has(name),
-      readOnly: propSchema.readOnly ?? false,
+
       description: propSchema.description ?? '',
       enumValues: propSchema.enum as string[] | undefined,
       defaultValue: propSchema.default != null ? String(propSchema.default) : undefined,
@@ -158,7 +158,7 @@ function getMediaTypeFields(
 function sortFields(fields: FieldInfo[]): FieldInfo[] {
   const priority = (f: FieldInfo): number => {
     if (f.required) return 0
-    if (f.readOnly) return 2
+
     return 1
   }
   return [...fields].sort((a, b) => {
@@ -167,6 +167,28 @@ function sortFields(fields: FieldInfo[]): FieldInfo[] {
     if (pa !== pb) return pa - pb
     return a.name.localeCompare(b.name)
   })
+}
+
+function fieldMatches(f: FieldInfo, lower: string): boolean {
+  return f.name.toLowerCase().includes(lower) ||
+    !!(f.description && f.description.toLowerCase().includes(lower))
+}
+
+function filterFieldsWithOneOf(fields: FieldInfo[], lower: string): FieldInfo[] {
+  const matched: FieldInfo[] = []
+  for (const f of fields) {
+    if (fieldMatches(f, lower)) {
+      matched.push(f)
+    } else if (f.oneOf) {
+      for (const variant of f.oneOf) {
+        if (variant.some(v => fieldMatches(v, lower))) {
+          matched.push(f)
+          break
+        }
+      }
+    }
+  }
+  return matched
 }
 
 export class QueryEngine {
@@ -306,6 +328,14 @@ export class QueryEngine {
     return Object.keys(this.parser.getAllSchemas())
   }
 
+  getSchemaList(): { name: string; description: string }[] {
+    const schemas = this.parser.getAllSchemas()
+    return Object.entries(schemas).map(([name, schema]) => ({
+      name,
+      description: schema.description ?? '',
+    })).sort((a, b) => a.name.localeCompare(b.name))
+  }
+
   getSchema(name: string, depth = -1): SchemaInfo | undefined {
     const schema = this.parser.getSchema(name)
     if (!schema) return undefined
@@ -399,10 +429,7 @@ export class QueryEngine {
 
     for (const [name, schema] of Object.entries(this.parser.getAllSchemas())) {
       const fields = schemaToFields(schema, this.parser.getAllSchemas(), 1)
-      const matched = fields.filter(f =>
-        f.name.toLowerCase().includes(lower) ||
-        (f.description && f.description.toLowerCase().includes(lower))
-      )
+      const matched = filterFieldsWithOneOf(fields, lower)
       if (matched.length > 0) {
         results.push({ schema: name, fields: matched })
       }
@@ -425,10 +452,7 @@ export class QueryEngine {
         ...(params.body?.fields ?? []),
       ]
 
-      const matched = allFields.filter(f =>
-        f.name.toLowerCase().includes(lower) ||
-        (f.description && f.description.toLowerCase().includes(lower))
-      )
+      const matched = filterFieldsWithOneOf(allFields, lower)
       if (matched.length > 0) {
         results.push({ method: op.method, path: op.path, fields: matched })
       }

@@ -10,7 +10,7 @@ export interface FieldInfo {
   name: string
   type: string
   required: boolean
-  readOnly?: boolean
+
   description: string
   enumValues?: string[]
   ref?: string

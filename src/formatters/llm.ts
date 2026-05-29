@@ -134,6 +134,8 @@ export function formatDetailLLM(detail: EndpointDetail): string {
       lines.push(`### ${resp.code}${desc}`)
       if (resp.fields.length > 0) {
         lines.push(fmtFieldsLLM(resp.fields, 1))
+      } else {
+        lines.push('  (empty)')
       }
     }
   }
@@ -205,6 +207,8 @@ export function formatResponseOnlyLLM(
     lines.push(`### ${resp.code}${desc}`)
     if (resp.fields.length > 0) {
       lines.push(fmtFieldsLLM(resp.fields, 1))
+    } else {
+      lines.push('  (empty)')
     }
   }
 

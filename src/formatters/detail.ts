@@ -49,6 +49,8 @@ export function formatDetailHuman(detail: EndpointDetail): string {
       lines.push(`  ${resp.code}${desc}`)
       if (resp.fields.length > 0) {
         lines.push(fmtFields(resp.fields, 4))
+      } else {
+        lines.push('    (empty)')
       }
     }
     lines.push('')
@@ -123,6 +125,8 @@ export function formatResponseOnlyHuman(
     lines.push(`${resp.code}${desc}:`)
     if (resp.fields.length > 0) {
       lines.push(fmtFields(resp.fields, 2))
+    } else {
+      lines.push('  (empty)')
     }
     lines.push('')
   }

@@ -11,7 +11,7 @@ function fieldToJSON(f: FieldInfo): any {
     description: f.description || null,
   }
   if (f.enumValues) obj.enum = f.enumValues
-  if (f.readOnly) obj.readOnly = true
+
   if (f.ref) obj.ref = f.ref
   if (f.defaultValue != null) obj.default = f.defaultValue
   if (f.example != null) obj.example = f.example
