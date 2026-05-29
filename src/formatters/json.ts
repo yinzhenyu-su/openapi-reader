@@ -120,14 +120,21 @@ export function formatSchemaJSON(schema: SchemaInfo, backRefs?: BackRef[]): stri
   return JSON.stringify(obj, null, 2)
 }
 
-export function formatSummaryJSON(summary: ApiSummary): string {
-  return JSON.stringify({
+export function formatExampleJSON(examples: { request?: any; responses: Record<string, any> }): string {
+  return JSON.stringify(examples, null, 2)
+}
+
+export function formatSummaryJSON(summary: ApiSummary & { schemas?: string[] }): string {
+  const obj: any = {
     title: summary.title,
     version: summary.version,
     endpoints: summary.endpoints,
     tags: summary.tags.map(t => ({ name: t.name, count: t.count })),
+    methods: summary.methods.map(m => ({ method: m.method, count: m.count })),
     auth: summary.auth,
     servers: summary.servers,
     models: summary.models,
-  }, null, 2)
+  }
+  if (summary.schemas) obj.schemas = summary.schemas
+  return JSON.stringify(obj, null, 2)
 }

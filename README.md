@@ -6,12 +6,13 @@ CLI tool for LLM-friendly OpenAPI 3.0 document querying.
 
 LLM agent 读取 OpenAPI 文档时，直接解析原始 JSON/YAML 会引入大量噪声（引号、括号、深层嵌套）。本工具提供结构化的 LLM 友好输出，消除噪声，按需获取精准信息。
 
-## 四步工作流
+## 五步工作流
 
-1. **`ls`** — 概览 API，顶层显示标题、端点数、认证、服务器信息，下方按 tag 分组列出所有端点
-2. **`get`** — 深入查看端点详情、请求参数、响应结构
-3. **`search`** — 全局搜索：端点的名称/路径/标签 + schema 字段 + 端点参数字段，一次命令查清所有关联
-4. **`schema`** — 查看数据模型定义，自动显示哪些端点使用了该模型
+1. **`summary`** — API 概览：标题、版本、端点数、tag 分布、method 分布、认证方式、服务器、模型数、schema 列表 + 命令提示
+2. **`ls`** — 端点列表：顶层显示标题、端点数、认证、服务器信息，下方按 tag 分组列出所有端点
+3. **`get`** — 深入查看端点详情、请求参数、响应结构，所有 ref 自动展开内联，支持 `--example` 生成 JSON 示例
+4. **`search`** — 全局搜索：端点的名称/路径/标签 + schema 字段 + 端点参数字段，支持 `--exact` 精确匹配
+5. **`schema`** — 查看数据模型定义，所有 ref 自动展开内联，自动显示哪些端点使用了该模型
 
 ## Spec Source Resolution
 
@@ -32,6 +33,36 @@ openapi-reader ls
 ```
 
 ## Commands
+
+### `summary` — Show API overview
+
+```
+openapi-reader [spec] summary
+```
+
+Shows a comprehensive API overview including:
+- Title and version
+- Total endpoint count
+- Tag distribution with counts
+- Method distribution (GET/POST/PUT/DELETE counts)
+- Authentication method
+- Server URLs
+- Model count
+- Schema names (up to 15 shown, truncated with count if more)
+- Command hints for next steps
+
+```
+## Pet Store API v1.0.0
+- Endpoints: 15
+- Tags: Pets (7), Store (3), Users (3), Payments (1), Other (1)
+- Methods: DELETE (1), GET (7), POST (6), PUT (1)
+- Auth: Bearer token (Authorization header)
+- Servers: https://api.petstore.example.com/v1, https://staging.petstore.example.com/v1
+- Models: 15
+- Schemas: Address, BaseEntity, CreateOrderRequest, CreatePetRequest, CreateUserRequest, Error, MedicalRecord, Order, PaymentRequest, PaymentResult, Pet, Photo, Staff, User, UserRef
+
+> Commands: `ls` list endpoints | `get <method> <path>` details | `search <keyword>` search | `schema <name>` view model
+```
 
 ### `ls` — List endpoints with overview
 
@@ -62,13 +93,12 @@ openapi-reader [spec] get [method] [path] [options]
 |--------|-------------|
 | `--params` | Show only request parameters (path/query/header/body) |
 | `--response [code]` | Show only response schemas, optionally filter by status code |
-| `--depth <n>` | Control nested field expansion depth |
+| `--example` | Generate request/response JSON examples |
 
 ### `search` — Search everything by keyword
 
 ```
-openapi-reader search <keyword> [spec]
-openapi-reader <spec> search <keyword>
+openapi-reader [spec] search <keyword>
 ```
 
 Searches across all sources in one pass, including oneOf variant fields:
@@ -78,6 +108,10 @@ Searches across all sources in one pass, including oneOf variant fields:
 
 Results are grouped by category in the output.
 
+| Option | Description |
+|--------|-------------|
+| `--exact` | Match field names exactly instead of substring (e.g. `id` won't match `petId`) |
+
 ### `schema` — View schema/model definition
 
 ```
@@ -85,11 +119,11 @@ openapi-reader [spec] schema [name] [options]
 ```
 
 - Omit `name` to list all schema names
-- Always shows which endpoints reference the schema (no `--used-by` flag needed)
-
-| Option | Description |
-|--------|-------------|
-| `--depth <n>` | Control nested field expansion depth |
+- Always shows which endpoints reference the schema
+- **Fuzzy matching**: case-insensitive exact match first, then substring match
+  - Single match: auto-selects (e.g., `schema pet` → `Pet`)
+  - Multiple matches: lists candidates (e.g., `schema request` → shows `CreatePetRequest`, `PaymentRequest`, etc.)
+  - No match: shows all available schemas
 
 ### Global Options
 
@@ -117,11 +151,15 @@ npm install && npm run build && npm install -g .
 ```bash
 # Spec from config (no spec arg needed)
 echo '{"spec":"spec.yaml"}' > .openapi-reader.json
+openapi-reader summary
 openapi-reader ls
 openapi-reader get POST /pets
 
 # Spec from environment variable
-OPENAPI_READER_SPEC=spec.yaml openapi-reader ls
+OPENAPI_READER_SPEC=spec.yaml openapi-reader summary
+
+# API overview (title/version/endpoints/tags/auth/servers/models/schemas)
+openapi-reader spec.yaml summary
 
 # List endpoints with overview header
 openapi-reader spec.yaml ls
@@ -147,11 +185,14 @@ openapi-reader spec.yaml get POST /pets --params
 # Get only response (or filter by code)
 openapi-reader spec.yaml get POST /pets --response 201
 
-# Depth control (limit nested expansion)
-openapi-reader spec.yaml get POST /pets --depth 1
+# Generate request/response JSON examples
+openapi-reader spec.yaml get POST /pets --example
 
 # Search everything (endpoints + schema fields + endpoint fields)
 openapi-reader spec.yaml search login
+
+# Exact field name matching (id won't match petId, orderId, etc.)
+openapi-reader spec.yaml search id --exact
 
 # List all schema names
 openapi-reader spec.yaml schema
@@ -167,6 +208,23 @@ openapi-reader https://api.example.com/openapi.json ls
 ```
 
 ## Example Output
+
+### summary
+
+```
+## Pet Store API v1.0.0
+- Endpoints: 15
+- Tags: Pets (7), Store (3), Users (3), Payments (1), Other (1)
+- Methods: DELETE (1), GET (7), POST (6), PUT (1)
+- Auth: Bearer token (Authorization header)
+- Servers: https://api.petstore.example.com/v1, https://staging.petstore.example.com/v1
+- Models: 15
+- Schemas: Address, BaseEntity, CreateOrderRequest, CreatePetRequest, CreateUserRequest, Error, MedicalRecord, Order, PaymentRequest, PaymentResult, Pet, Photo, Staff, User, UserRef
+
+> Commands: `ls` list endpoints | `get <method> <path>` details | `search <keyword>` search | `schema <name>` view model
+```
+
+### get (human format)
 
 ```
 POST /pets
@@ -213,7 +271,9 @@ Auth: Bearer token (Authorization header)
   - name: string, req  Pet name
   - species: cat | dog | fish | bird | reptile, req
   - createdAt: datetime, opt  When registered
-  - owner: → UserRef, opt
+  - owner: UserRef, opt
+    - id: string, opt
+    - name: string, opt
   - photos: object[], opt  Pet photos
     - id: string, opt
     - url: string, opt
@@ -224,10 +284,8 @@ Auth: Bearer token (Authorization header)
 - `req` / `opt` — Required / optional field
 - `cat | dog | fish` — Enum values
 - `=20` — Default value
-- `→ SchemaName` — Reference to a named schema (use `schema SchemaName` to inspect)
-- `object[] → SchemaName` — Array of objects referencing a named schema
-- `oneOf (oneOf)` with `- variant_name:` — Polymorphic type variants, each variant labeled
 - `string[]` — Array type
+- `oneOf (oneOf)` with `- variant_name:` — Polymorphic type variants, each variant labeled
 - `[DEPRECATED]` — Deprecated endpoint
 - `(empty)` — Response with no body fields
 

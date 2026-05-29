@@ -61,6 +61,7 @@ export interface ApiSummary {
   version: string
   endpoints: number
   tags: { name: string; count: number }[]
+  methods: { method: string; count: number }[]
   auth: string
   servers: string[]
   models: number

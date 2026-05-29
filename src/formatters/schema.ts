@@ -31,6 +31,10 @@ export function formatSchemaWithBackRefsHuman(schema: SchemaInfo, backRefs: Back
   return lines.join('\n')
 }
 
-export function formatSchemaNotFound(name: string): string {
-  return `Schema "${name}" not found. Available schemas may need to be listed first.`
+export function formatSchemaNotFound(name: string, available?: string[]): string {
+  let msg = `Schema "${name}" not found.`
+  if (available && available.length > 0) {
+    msg += ` Available schemas: ${available.join(', ')}`
+  }
+  return msg
 }

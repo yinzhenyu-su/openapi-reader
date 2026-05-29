@@ -5,6 +5,7 @@ import {
   formatSearchJSON,
   formatSchemaJSON,
   formatSummaryJSON,
+  formatExampleJSON,
 } from '../../formatters/json.js'
 import type { EndpointSummary, EndpointDetail, SchemaInfo, ApiSummary, BackRef } from '../../types.js'
 
@@ -196,6 +197,7 @@ describe('JSON formatters', () => {
       version: '1.0.0',
       endpoints: 15,
       tags: [{ name: 'Pets', count: 7 }],
+      methods: [{ method: 'GET', count: 8 }, { method: 'POST', count: 7 }],
       auth: 'Bearer token',
       servers: ['https://api.example.com'],
       models: 10,
@@ -216,9 +218,47 @@ describe('JSON formatters', () => {
       expect(parsed.tags[0].count).toBe(7)
     })
 
+    it('should include methods with counts', () => {
+      const parsed = JSON.parse(formatSummaryJSON(mockSummary))
+      expect(parsed.methods).toBeDefined()
+      expect(parsed.methods[0].method).toBe('GET')
+      expect(parsed.methods[0].count).toBe(8)
+    })
+
     it('should include servers', () => {
       const parsed = JSON.parse(formatSummaryJSON(mockSummary))
       expect(parsed.servers).toContain('https://api.example.com')
+    })
+  })
+
+  describe('formatExampleJSON', () => {
+    it('should return valid JSON with request and responses', () => {
+      const output = formatExampleJSON({
+        request: { name: 'Fido' },
+        responses: { '201': { id: '123' } },
+      })
+      const parsed = JSON.parse(output)
+      expect(parsed.request).toEqual({ name: 'Fido' })
+      expect(parsed.responses['201']).toEqual({ id: '123' })
+    })
+
+    it('should handle undefined request', () => {
+      const output = formatExampleJSON({
+        responses: { '200': { status: 'ok' } },
+      })
+      const parsed = JSON.parse(output)
+      expect(parsed.request).toBeUndefined()
+      expect(parsed.responses['200']).toBeDefined()
+    })
+
+    it('should handle empty responses', () => {
+      const output = formatExampleJSON({
+        request: { name: 'test' },
+        responses: {},
+      })
+      const parsed = JSON.parse(output)
+      expect(parsed.request).toEqual({ name: 'test' })
+      expect(parsed.responses).toEqual({})
     })
   })
 })

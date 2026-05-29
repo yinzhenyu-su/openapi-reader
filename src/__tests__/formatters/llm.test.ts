@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatListingLLM, formatDetailLLM, formatParamsOnlyLLM, formatResponseOnlyLLM, formatCodesOnlyLLM, formatSearchLLM, formatSchemaLLM, formatSchemaWithBackRefsLLM, formatSummaryLLM } from '../../formatters/llm.js'
+import { formatListingLLM, formatDetailLLM, formatParamsOnlyLLM, formatResponseOnlyLLM, formatCodesOnlyLLM, formatSearchLLM, formatSchemaLLM, formatSchemaWithBackRefsLLM, formatSummaryLLM, formatExampleLLM } from '../../formatters/llm.js'
 import type { EndpointSummary, EndpointDetail, SchemaInfo, BackRef, ApiSummary } from '../../types.js'
 
 describe('LLM formatters', () => {
@@ -217,21 +217,86 @@ describe('LLM formatters', () => {
       version: '1.0.0',
       endpoints: 15,
       tags: [{ name: 'Pets', count: 7 }],
+      methods: [{ method: 'GET', count: 8 }, { method: 'POST', count: 7 }],
       auth: 'Bearer token',
       servers: ['https://api.example.com/v1'],
       models: 10,
     }
 
+    const schemaNames = ['Address', 'Error', 'Pet', 'User']
+
     it('should format with ## header', () => {
-      const output = formatSummaryLLM(summary)
+      const output = formatSummaryLLM(summary, schemaNames)
       expect(output).toMatch(/^## Pet Store API v1\.0\.0/m)
     })
 
     it('should include key info with - prefix', () => {
-      const output = formatSummaryLLM(summary)
+      const output = formatSummaryLLM(summary, schemaNames)
       expect(output).toContain('- Endpoints: 15')
       expect(output).toContain('- Auth: Bearer token')
       expect(output).toContain('- Models: 10')
+    })
+
+    it('should include method distribution', () => {
+      const output = formatSummaryLLM(summary, schemaNames)
+      expect(output).toContain('- Methods:')
+      expect(output).toContain('GET (8)')
+      expect(output).toContain('POST (7)')
+    })
+
+    it('should include schemas', () => {
+      const output = formatSummaryLLM(summary, schemaNames)
+      expect(output).toContain('- Schemas: Address, Error, Pet, User')
+    })
+
+    it('should include command hints', () => {
+      const output = formatSummaryLLM(summary, schemaNames)
+      expect(output).toContain('Commands:')
+      expect(output).toContain('ls')
+      expect(output).toContain('get')
+      expect(output).toContain('search')
+      expect(output).toContain('schema')
+    })
+  })
+
+  describe('formatExampleLLM', () => {
+    it('should format request and response examples with ### headers', () => {
+      const output = formatExampleLLM({
+        request: { name: 'Fido', species: 'dog' },
+        responses: { '201': { id: '123', name: 'Fido' } },
+      })
+      expect(output).toContain('### Request Example')
+      expect(output).toContain('### Response 201 Example')
+      expect(output).toContain('```json')
+      expect(output).toContain('"name": "Fido"')
+    })
+
+    it('should handle request-only examples', () => {
+      const output = formatExampleLLM({
+        request: { name: 'test' },
+        responses: {},
+      })
+      expect(output).toContain('### Request Example')
+      expect(output).not.toContain('Response')
+    })
+
+    it('should handle response-only examples', () => {
+      const output = formatExampleLLM({
+        responses: { '200': { id: '123' } },
+      })
+      expect(output).not.toContain('Request')
+      expect(output).toContain('### Response 200 Example')
+    })
+
+    it('should include valid JSON in code blocks', () => {
+      const output = formatExampleLLM({
+        request: { name: 'test' },
+        responses: {},
+      })
+      const match = output.match(/```json\n([\s\S]*?)\n```/)
+      expect(match).toBeDefined()
+      const parsed = JSON.parse(match![1])
+      expect(parsed.name).toBe('test')
     })
   })
 })

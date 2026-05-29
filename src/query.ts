@@ -79,15 +79,14 @@ function mergeAllOf(schema: OpenAPIV3.SchemaObject): OpenAPIV3.SchemaObject {
 function schemaToFields(
   schema: OpenAPIV3.SchemaObject,
   schemaRegistry: Record<string, OpenAPIV3.SchemaObject>,
-  depth = -1,
-  currentDepth = 0
+  visited: Set<string> = new Set()
 ): FieldInfo[] {
   const resolved = mergeAllOf(schema)
 
   if (resolved.type === 'array') {
     const items = resolved.items as OpenAPIV3.SchemaObject | undefined
     if (items?.type === 'object' && items.properties) {
-      return schemaToFields(items, schemaRegistry, depth, currentDepth)
+      return schemaToFields(items, schemaRegistry, visited)
     }
   }
 
@@ -113,32 +112,51 @@ function schemaToFields(
     if (propSchema.oneOf && propSchema.oneOf.length > 0) {
       field.oneOf = propSchema.oneOf.map(variant => {
         const v = variant as OpenAPIV3.SchemaObject
-        return schemaToFields(v, schemaRegistry, depth, currentDepth + 1)
+        return schemaToFields(v, schemaRegistry, visited)
       })
     }
 
-    const canExpand = depth < 0 || currentDepth < depth
-    if (canExpand && typeStr === 'object' && propSchema.properties) {
-      field.children = schemaToFields(propSchema, schemaRegistry, depth, currentDepth + 1)
+    if (propSchema.properties) {
+      if ((typeStr === 'object' || !isKnownType) && !typeStr.endsWith('[]')) {
+        const schemaName = propSchema.title && propSchema.title !== typeStr ? propSchema.title : typeStr
+        if (visited.has(schemaName)) {
+          field.ref = schemaName
+        } else {
+          visited.add(schemaName)
+          field.children = schemaToFields(propSchema, schemaRegistry, visited)
+          visited.delete(schemaName)
+        }
+      }
     }
 
     if (propSchema.type === 'array') {
       const items = propSchema.items as OpenAPIV3.SchemaObject | undefined
       if (items && items.type === 'object' && items.properties) {
-        if (canExpand) {
-          field.children = schemaToFields(items, schemaRegistry, depth, currentDepth + 1)
+        const schemaName = items.title
+        if (schemaName && visited.has(schemaName)) {
+          field.ref = schemaName
         } else {
-          field.ref = items.title ?? undefined
+          if (schemaName) visited.add(schemaName)
+          field.children = schemaToFields(items, schemaRegistry, visited)
+          if (schemaName) visited.delete(schemaName)
         }
       }
     }
 
-    if (propSchema.type === 'object' && !propSchema.properties) {
-      field.ref = propSchema.title ?? undefined
-    }
-
-    if (!canExpand && !field.children && propSchema.properties && propSchema.title) {
-      field.ref = propSchema.title
+    if (propSchema.type === 'object' && !propSchema.properties && propSchema.title) {
+      const schemaName = propSchema.title
+      if (visited.has(schemaName)) {
+        field.ref = schemaName
+      } else {
+        const refSchema = schemaRegistry[schemaName]
+        if (refSchema) {
+          visited.add(schemaName)
+          field.children = schemaToFields(refSchema, schemaRegistry, visited)
+          visited.delete(schemaName)
+        } else {
+          field.ref = schemaName
+        }
+      }
     }
 
     return field
@@ -147,12 +165,11 @@ function schemaToFields(
 
 function getMediaTypeFields(
   mediaType: OpenAPIV3.MediaTypeObject | undefined,
-  schemaRegistry: Record<string, OpenAPIV3.SchemaObject>,
-  depth = -1
+  schemaRegistry: Record<string, OpenAPIV3.SchemaObject>
 ): FieldInfo[] {
   if (!mediaType?.schema) return []
   const schema = mediaType.schema as OpenAPIV3.SchemaObject
-  return schemaToFields(schema, schemaRegistry, depth)
+  return schemaToFields(schema, schemaRegistry)
 }
 
 function sortFields(fields: FieldInfo[]): FieldInfo[] {
@@ -169,19 +186,22 @@ function sortFields(fields: FieldInfo[]): FieldInfo[] {
   })
 }
 
-function fieldMatches(f: FieldInfo, lower: string): boolean {
+function fieldMatches(f: FieldInfo, lower: string, exact = false): boolean {
+  if (exact) {
+    return f.name.toLowerCase() === lower
+  }
   return f.name.toLowerCase().includes(lower) ||
     !!(f.description && f.description.toLowerCase().includes(lower))
 }
 
-function filterFieldsWithOneOf(fields: FieldInfo[], lower: string): FieldInfo[] {
+function filterFieldsWithOneOf(fields: FieldInfo[], lower: string, exact = false): FieldInfo[] {
   const matched: FieldInfo[] = []
   for (const f of fields) {
-    if (fieldMatches(f, lower)) {
+    if (fieldMatches(f, lower, exact)) {
       matched.push(f)
     } else if (f.oneOf) {
       for (const variant of f.oneOf) {
-        if (variant.some(v => fieldMatches(v, lower))) {
+        if (variant.some(v => fieldMatches(v, lower, exact))) {
           matched.push(f)
           break
         }
@@ -276,13 +296,13 @@ export class QueryEngine {
     return []
   }
 
-  getEndpointDetail(method: string, path: string, depth = -1): EndpointDetail | undefined {
+  getEndpointDetail(method: string, path: string): EndpointDetail | undefined {
     const op = this.parser.getOperation(method, path)
     if (!op) return undefined
 
     const schemaRegistry = this.parser.getAllSchemas()
-    const params = this.extractParams(op, schemaRegistry, depth)
-    const responses = this.extractResponses(op, schemaRegistry, depth)
+    const params = this.extractParams(op, schemaRegistry)
+    const responses = this.extractResponses(op, schemaRegistry)
     const codes = this.extractCodes(op)
 
     const hasAuth = this.parser.requiresAuth(op.security)
@@ -304,16 +324,16 @@ export class QueryEngine {
     }
   }
 
-  getEndpointParams(method: string, path: string, depth = -1): ParamSection | undefined {
+  getEndpointParams(method: string, path: string): ParamSection | undefined {
     const op = this.parser.getOperation(method, path)
     if (!op) return undefined
-    return this.extractParams(op, this.parser.getAllSchemas(), depth)
+    return this.extractParams(op, this.parser.getAllSchemas())
   }
 
-  getEndpointResponses(method: string, path: string, code?: string, depth = -1): ResponseInfo[] | undefined {
+  getEndpointResponses(method: string, path: string, code?: string): ResponseInfo[] | undefined {
     const op = this.parser.getOperation(method, path)
     if (!op) return undefined
-    const allResponses = this.extractResponses(op, this.parser.getAllSchemas(), depth)
+    const allResponses = this.extractResponses(op, this.parser.getAllSchemas())
     if (code) return allResponses.filter(r => r.code === code)
     return allResponses
   }
@@ -336,12 +356,12 @@ export class QueryEngine {
     })).sort((a, b) => a.name.localeCompare(b.name))
   }
 
-  getSchema(name: string, depth = -1): SchemaInfo | undefined {
+  getSchema(name: string): SchemaInfo | undefined {
     const schema = this.parser.getSchema(name)
     if (!schema) return undefined
     return {
       name,
-      fields: schemaToFields(schema, this.parser.getAllSchemas(), depth),
+      fields: schemaToFields(schema, this.parser.getAllSchemas()),
     }
   }
 
@@ -423,13 +443,13 @@ export class QueryEngine {
     }))
   }
 
-  searchFields(keyword: string): { schema: string; fields: FieldInfo[] }[] {
+  searchFields(keyword: string, exact = false): { schema: string; fields: FieldInfo[] }[] {
     const lower = keyword.toLowerCase()
     const results: { schema: string; fields: FieldInfo[] }[] = []
 
     for (const [name, schema] of Object.entries(this.parser.getAllSchemas())) {
-      const fields = schemaToFields(schema, this.parser.getAllSchemas(), 1)
-      const matched = filterFieldsWithOneOf(fields, lower)
+      const fields = schemaToFields(schema, this.parser.getAllSchemas())
+      const matched = filterFieldsWithOneOf(fields, lower, exact)
       if (matched.length > 0) {
         results.push({ schema: name, fields: matched })
       }
@@ -438,13 +458,13 @@ export class QueryEngine {
     return results.sort((a, b) => a.schema.localeCompare(b.schema))
   }
 
-  searchEndpointFields(keyword: string): { method: string; path: string; fields: FieldInfo[] }[] {
+  searchEndpointFields(keyword: string, exact = false): { method: string; path: string; fields: FieldInfo[] }[] {
     const lower = keyword.toLowerCase()
     const results: { method: string; path: string; fields: FieldInfo[] }[] = []
 
     for (const op of this.parser.getAllOperations()) {
       const schemaRegistry = this.parser.getAllSchemas()
-      const params = this.extractParams(op, schemaRegistry, 1)
+      const params = this.extractParams(op, schemaRegistry)
       const allFields: FieldInfo[] = [
         ...params.pathParams,
         ...params.queryParams,
@@ -452,7 +472,7 @@ export class QueryEngine {
         ...(params.body?.fields ?? []),
       ]
 
-      const matched = filterFieldsWithOneOf(allFields, lower)
+      const matched = filterFieldsWithOneOf(allFields, lower, exact)
       if (matched.length > 0) {
         results.push({ method: op.method, path: op.path, fields: matched })
       }
@@ -461,19 +481,114 @@ export class QueryEngine {
     return results.sort((a, b) => a.path.localeCompare(b.path))
   }
 
+  generateExample(schema: OpenAPIV3.SchemaObject, visited = new Set<string>()): any {
+    if (schema.allOf) {
+      schema = mergeAllOf(schema)
+    }
+
+    if (schema.example !== undefined && schema.example !== null) return schema.example
+
+    if (schema.enum && schema.enum.length > 0) return schema.enum[0]
+
+    if (schema.oneOf && schema.oneOf.length > 0) {
+      return this.generateExample(schema.oneOf[0] as OpenAPIV3.SchemaObject, visited)
+    }
+    if (schema.anyOf && schema.anyOf.length > 0) {
+      return this.generateExample(schema.anyOf[0] as OpenAPIV3.SchemaObject, visited)
+    }
+
+    const type = schema.type
+
+    if (type === 'array') {
+      const items = schema.items as OpenAPIV3.SchemaObject | undefined
+      if (!items) return []
+      return [this.generateExample(items, visited)]
+    }
+
+    if (type === 'object' || (!type && schema.properties)) {
+      const title = schema.title
+      if (title && visited.has(title)) return {}
+      if (title) visited.add(title)
+
+      const obj: Record<string, any> = {}
+      const required = new Set(schema.required ?? [])
+      const properties = schema.properties ?? {}
+      for (const [name, prop] of Object.entries(properties)) {
+        if (required.has(name)) {
+          obj[name] = this.generateExample(prop as OpenAPIV3.SchemaObject, visited)
+        }
+      }
+
+      if (title) visited.delete(title)
+      return obj
+    }
+
+    if (type === 'string') {
+      if (schema.format === 'date-time') return '2024-01-01T00:00:00Z'
+      if (schema.format === 'date') return '2024-01-01'
+      if (schema.format === 'uuid') return '00000000-0000-0000-0000-000000000000'
+      if (schema.format === 'email') return 'user@example.com'
+      if (schema.format === 'uri') return 'https://example.com'
+      if (schema.format === 'binary') return '<binary>'
+      if (schema.format === 'password') return '********'
+      return 'string'
+    }
+
+    if (type === 'integer') return 0
+    if (type === 'number') return 0
+    if (type === 'boolean') return false
+
+    return null
+  }
+
+  generateEndpointExamples(method: string, path: string): { request?: any; responses: Record<string, any> } | undefined {
+    const op = this.parser.getOperation(method, path)
+    if (!op) return undefined
+
+    const result: { request?: any; responses: Record<string, any> } = { responses: {} }
+
+    if (op.requestBody) {
+      const contentType = Object.keys(op.requestBody.content)[0]
+      const mediaType = op.requestBody.content[contentType]
+      if (mediaType?.schema) {
+        result.request = this.generateExample(mediaType.schema as OpenAPIV3.SchemaObject)
+      }
+    }
+
+    for (const [code, resp] of Object.entries(op.responses)) {
+      const r = resp as OpenAPIV3.ResponseObject
+      const contentType = Object.keys(r.content ?? {})[0]
+      const mediaType = r.content?.[contentType]
+      if (mediaType?.schema) {
+        result.responses[code] = this.generateExample(mediaType.schema as OpenAPIV3.SchemaObject)
+      }
+    }
+
+    return result
+  }
+
   getApiSummary(): ApiSummary {
+    const methodCounts: Record<string, number> = {}
+    for (const op of this.parser.getAllOperations()) {
+      methodCounts[op.method] = (methodCounts[op.method] ?? 0) + 1
+    }
+    const methods = Object.entries(methodCounts)
+      .map(([method, count]) => ({ method, count }))
+      .sort((a, b) => a.method.localeCompare(b.method))
+
     return {
       title: this.parser.getTitle(),
       version: this.parser.getVersion(),
       endpoints: this.parser.getEndpointCount(),
       tags: Object.entries(this.parser.getTagEndpointCounts()).map(([name, count]) => ({ name, count })),
+      methods,
       auth: this.parser.requiresAuth() ? Object.values(this.parser.getAuthSchemes()).join(', ') : 'None',
       servers: this.parser.getServers(),
       models: this.parser.getSchemaCount(),
     }
   }
 
-  private extractParams(op: OperationInfo, schemaRegistry: Record<string, OpenAPIV3.SchemaObject>, depth = -1): ParamSection {
+  private extractParams(op: OperationInfo, schemaRegistry: Record<string, OpenAPIV3.SchemaObject>): ParamSection {
     const pathParams: FieldInfo[] = []
     const queryParams: FieldInfo[] = []
     const headerParams: FieldInfo[] = []
@@ -504,14 +619,14 @@ export class QueryEngine {
       body = {
         contentType,
         required: rb.required ?? false,
-        fields: sortFields(getMediaTypeFields(mediaType, schemaRegistry, depth)),
+        fields: sortFields(getMediaTypeFields(mediaType, schemaRegistry)),
       }
     }
 
     return { pathParams: sortFields(pathParams), queryParams: sortFields(queryParams), headerParams: sortFields(headerParams), body }
   }
 
-  private extractResponses(op: OperationInfo, schemaRegistry: Record<string, OpenAPIV3.SchemaObject>, depth = -1): ResponseInfo[] {
+  private extractResponses(op: OperationInfo, schemaRegistry: Record<string, OpenAPIV3.SchemaObject>): ResponseInfo[] {
     const result = Object.entries(op.responses).map(([code, response]) => {
       const resp = response as OpenAPIV3.ResponseObject
       const contentType = Object.keys(resp.content ?? {})[0] ?? 'application/json'
@@ -519,7 +634,7 @@ export class QueryEngine {
       return {
         code,
         description: resp.description ?? '',
-        fields: sortFields(getMediaTypeFields(mediaType, schemaRegistry, depth)),
+        fields: sortFields(getMediaTypeFields(mediaType, schemaRegistry)),
       }
     })
 

@@ -134,6 +134,23 @@ export function formatResponseOnlyHuman(
   return lines.join('\n').trimEnd()
 }
 
+export function formatExampleHuman(examples: { request?: any; responses: Record<string, any> }): string {
+  const lines: string[] = []
+
+  if (examples.request !== undefined) {
+    lines.push('Request Example:')
+    lines.push(JSON.stringify(examples.request, null, 2))
+  }
+
+  for (const [code, example] of Object.entries(examples.responses)) {
+    if (lines.length > 0) lines.push('')
+    lines.push(`Response ${code} Example:`)
+    lines.push(JSON.stringify(example, null, 2))
+  }
+
+  return lines.join('\n')
+}
+
 export function formatCodesOnlyHuman(
   method: string,
   path: string,

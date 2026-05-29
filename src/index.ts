@@ -11,12 +11,14 @@ import { formatSearchAllHuman } from './formatters/search.js'
 import { formatSchemaWithBackRefsHuman, formatSchemaNotFound } from './formatters/schema.js'
 import {
   formatListingLLM, formatListingBriefLLM, formatDetailLLM, formatParamsOnlyLLM, formatResponseOnlyLLM,
-  formatSearchAllLLM, formatSchemaWithBackRefsLLM
+  formatSearchAllLLM, formatSchemaWithBackRefsLLM, formatSummaryLLM, formatExampleLLM
 } from './formatters/llm.js'
 import {
   formatListingJSON, formatDetailJSON,
-  formatSearchAllJSON, formatSchemaJSON
+  formatSearchAllJSON, formatSchemaJSON, formatSummaryJSON, formatExampleJSON
 } from './formatters/json.js'
+import { formatExampleHuman } from './formatters/detail.js'
+import { formatSummaryHuman } from './formatters/summary.js'
 
 function resolveSpecPath(arg?: string): string {
   if (arg) return arg
@@ -91,6 +93,14 @@ program
       })
 
       const summary = q.getApiSummary()
+
+      if (endpoints.length === 0 && options.tag && options.tag.length > 0) {
+        const availableTags = summary.tags.map(t => t.name).join(', ')
+        console.error(`No endpoints found for tag(s): ${options.tag.join(', ')}`)
+        console.error(`Available tags: ${availableTags}`)
+        process.exit(1)
+      }
+
       const fmt = getFormatterType(options)
       let listingOutput: string
       if (options.brief) {
@@ -118,6 +128,31 @@ program
   })
 
 program
+  .command('summary')
+  .description('Show API overview')
+  .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
+  .action(async (spec: string | undefined) => {
+    try {
+      const q = await ensureLoaded(resolveSpecPath(spec))
+      const summary = q.getApiSummary()
+      const schemas = q.getSchemaList()
+      const schemaNames = schemas.map(s => s.name)
+      const fmt = getFormatterType({})
+
+      if (fmt === 'json') {
+        console.log(formatSummaryJSON({ ...summary, schemas: schemaNames }))
+      } else if (fmt === 'human') {
+        console.log(formatSummaryHuman(summary, schemaNames))
+      } else {
+        console.log(formatSummaryLLM(summary, schemaNames))
+      }
+    } catch (err: any) {
+      console.error(`Error: ${err.message}`)
+      process.exit(1)
+    }
+  })
+
+program
   .command('get')
   .description('Get endpoint details')
   .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
@@ -125,15 +160,14 @@ program
   .argument('[path]', 'Endpoint path (e.g., /pets). Supports fuzzy matching if exact path not found.')
   .option('--params', 'Show only request parameters')
   .option('--response [code]', 'Show only response schemas, optionally filter by status code')
-  .option('--depth <n>', 'Nested field depth (default: unlimited)', parseInt)
+  .option('--example', 'Generate request/response JSON examples')
   .action(async (spec: string | undefined, method: string | undefined, path: string | undefined, options: {
     params?: boolean; response?: string | boolean;
-    depth?: number; format?: string
+    format?: string; example?: boolean
   }) => {
     try {
       const resolvedSpec = resolveSpecPath(spec)
       const q = await ensureLoaded(resolvedSpec)
-      const depth = options.depth ?? -1
       const fmt = getFormatterType(options)
 
       const httpMethods = ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD', 'TRACE']
@@ -167,9 +201,9 @@ program
         if (pathGroup.size === 1) {
           const [matchedPath, eps] = pathGroup.entries().next().value!
           if (eps.length === 1) {
-            showEndpoint(q, eps[0].method, matchedPath, depth, options, fmt)
+            showEndpoint(q, eps[0].method, matchedPath, options, fmt)
           } else {
-            showMultiEndpoints(q, eps, matchedPath, depth, options, fmt)
+            showMultiEndpoints(q, eps, matchedPath, options, fmt)
           }
         } else {
           for (const [matchedPath, eps] of pathGroup) {
@@ -185,7 +219,7 @@ program
 
       const detail = q.getEndpointDetail(upperMethod, resolvedPath)
       if (detail) {
-        showEndpoint(q, upperMethod, resolvedPath, depth, options, fmt)
+        showEndpoint(q, upperMethod, resolvedPath, options, fmt)
         return
       }
 
@@ -194,9 +228,9 @@ program
         if (allOnPath.length > 0) {
           if (allOnPath.length === 1) {
             if (allOnPath[0].methods.length === 1) {
-              showEndpoint(q, allOnPath[0].methods[0], allOnPath[0].path, depth, options, fmt)
+              showEndpoint(q, allOnPath[0].methods[0], allOnPath[0].path, options, fmt)
             } else if (allOnPath[0].methods.includes(upperMethod)) {
-              showEndpoint(q, upperMethod, allOnPath[0].path, depth, options, fmt)
+              showEndpoint(q, upperMethod, allOnPath[0].path, options, fmt)
             } else {
               for (const m of allOnPath[0].methods) {
                 console.log(`${m} ${allOnPath[0].path}`)
@@ -221,7 +255,7 @@ program
               console.error(`  ${s.method} ${s.path}${s.summary ? '  ' + s.summary : ''}`)
             }
           } else {
-            console.error(`Error: Endpoint ${upperMethod} ${resolvedPath} not found`)
+            console.error(`Endpoint ${upperMethod} ${resolvedPath} not found. Run \`ls\` to see all endpoints.`)
           }
           process.exit(1)
         }
@@ -240,9 +274,9 @@ program
         if (pathGroup.size === 1) {
           const [matchedPath, eps] = pathGroup.entries().next().value!
           if (eps.length === 1) {
-            showEndpoint(q, eps[0].method, matchedPath, depth, options, fmt)
+            showEndpoint(q, eps[0].method, matchedPath, options, fmt)
           } else {
-            showMultiEndpoints(q, eps, matchedPath, depth, options, fmt)
+            showMultiEndpoints(q, eps, matchedPath, options, fmt)
           }
         } else {
           for (const [matchedPath, eps] of pathGroup) {
@@ -260,27 +294,56 @@ program
     }
   })
 
-function hasResponses(q: QueryEngine, method: string, path: string, code: string | undefined, depth: number): boolean {
-  const responses = q.getEndpointResponses(method, path, code, depth)
+function hasResponses(q: QueryEngine, method: string, path: string, code: string | undefined): boolean {
+  const responses = q.getEndpointResponses(method, path, code)
   return responses ? responses.length > 0 : false
 }
 
-function showEndpoint(q: QueryEngine, method: string, path: string, depth: number, options: any, fmt: FormatType) {
+function showEndpoint(q: QueryEngine, method: string, path: string, options: any, fmt: FormatType) {
+  if (options.example) {
+    const examples = q.generateEndpointExamples(method, path)
+    if (!examples) { console.error(`Error: Endpoint ${method} ${path} not found`); process.exit(1) }
+    const filtered: { request?: any; responses: Record<string, any> } = { responses: {} }
+    if (options.params) {
+      filtered.request = examples.request
+    } else if (options.response !== undefined) {
+      const code = typeof options.response === 'string' ? options.response : undefined
+      if (code) {
+        if (examples.responses[code] !== undefined) {
+          filtered.responses[code] = examples.responses[code]
+        }
+      } else {
+        filtered.responses = examples.responses
+      }
+    } else {
+      filtered.request = examples.request
+      filtered.responses = examples.responses
+    }
+    if (fmt === 'json') {
+      console.log(formatExampleJSON(filtered))
+    } else if (fmt === 'human') {
+      console.log(formatExampleHuman(filtered))
+    } else {
+      console.log(formatExampleLLM(filtered))
+    }
+    return
+  }
+
   if (options.params) {
-    const params = q.getEndpointParams(method, path, depth)
+    const params = q.getEndpointParams(method, path)
     if (!params) { console.error(`Error: Endpoint ${method} ${path} not found`); process.exit(1) }
-    const detail = q.getEndpointDetail(method, path, depth)!
+    const detail = q.getEndpointDetail(method, path)!
     console.log(fmt === 'llm' ? formatParamsOnlyLLM(detail) : formatParamsOnlyHuman(detail))
   } else if (options.response !== undefined) {
     const code = typeof options.response === 'string' ? options.response : undefined
-    const responses = q.getEndpointResponses(method, path, code, depth)
+    const responses = q.getEndpointResponses(method, path, code)
     if (!responses || responses.length === 0) {
       console.error(`Error: No responses found${code ? ` for code ${code}` : ''}`)
       process.exit(1)
     }
     console.log(fmt === 'llm' ? formatResponseOnlyLLM(method, path, responses) : formatResponseOnlyHuman(method, path, responses))
   } else {
-    const detail = q.getEndpointDetail(method, path, depth)
+    const detail = q.getEndpointDetail(method, path)
     if (!detail) { console.error(`Error: Endpoint ${method} ${path} not found`); process.exit(1) }
 
     if (fmt === 'json') {
@@ -295,27 +358,28 @@ function showEndpoint(q: QueryEngine, method: string, path: string, depth: numbe
 
 function showMultiEndpoints(
   q: QueryEngine,
-  eps: { method: string; path: string }[],
+  eps: { method: string; path: string; summary?: string }[],
   path: string,
-  depth: number,
   options: any,
   fmt: FormatType
 ) {
   if (options.response !== undefined) {
     const code = typeof options.response === 'string' ? options.response : undefined
-    const filtered = eps.filter(ep => hasResponses(q, ep.method, path, code, depth))
+    const filtered = eps.filter(ep => hasResponses(q, ep.method, path, code))
     if (filtered.length === 0) {
       console.error(`Error: No responses found${code ? ` for code ${code}` : ''}`)
       process.exit(1)
     }
     for (const ep of filtered) {
-      showEndpoint(q, ep.method, path, depth, options, fmt)
+      showEndpoint(q, ep.method, path, options, fmt)
     }
     return
   }
   for (const ep of eps) {
-    showEndpoint(q, ep.method, path, depth, options, fmt)
+    const summary = ep.summary ? `  ${ep.summary}` : ''
+    console.log(`${ep.method} ${path}${summary}`)
   }
+  console.error(`\nMultiple methods on ${path}. Specify the method, e.g. get GET ${path}`)
 }
 
 program
@@ -323,7 +387,8 @@ program
   .description('Search endpoints, schemas, and fields by keyword')
   .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
   .argument('[keyword]', 'Search keyword')
-  .action(async (spec: string | undefined, keyword: string | undefined) => {
+  .option('--exact', 'Match field names exactly instead of substring')
+  .action(async (spec: string | undefined, keyword: string | undefined, options: { exact?: boolean }) => {
     try {
       let resolvedSpec: string
       let resolvedKeyword: string
@@ -339,9 +404,10 @@ program
         process.exit(1)
       }
       const q = await ensureLoaded(resolvedSpec)
+      const exact = options.exact ?? false
       const endpoints = q.searchEndpoints(resolvedKeyword)
-      const schemaFields = q.searchFields(resolvedKeyword)
-      const endpointFields = q.searchEndpointFields(resolvedKeyword)
+      const schemaFields = q.searchFields(resolvedKeyword, exact)
+      const endpointFields = q.searchEndpointFields(resolvedKeyword, exact)
       const fmt = getFormatterType({})
       if (fmt === 'json') {
         console.log(formatSearchAllJSON(endpoints, schemaFields, endpointFields))
@@ -361,8 +427,7 @@ program
   .description('View a schema/model definition')
   .argument('[spec]', 'Path or URL to OpenAPI 3.0 spec')
   .argument('[name]', 'Schema name')
-  .option('--depth <n>', 'Nested field depth', parseInt)
-  .action(async (spec: string | undefined, name: string | undefined, options: { depth?: number; format?: string }) => {
+  .action(async (spec: string | undefined, name: string | undefined, options: { format?: string }) => {
     try {
       const q = await ensureLoaded(resolveSpecPath(spec))
 
@@ -380,23 +445,44 @@ program
         return
       }
 
-      const depth = options.depth ?? -1
-      const schema = q.getSchema(name, depth)
+      let schema = q.getSchema(name)
+      let resolvedName = name
 
       if (!schema) {
-        console.log(formatSchemaNotFound(name))
-        process.exit(1)
+        const available = q.getSchemaNames()
+        const lower = name.toLowerCase()
+        const caseMatch = available.find(n => n.toLowerCase() === lower)
+        if (caseMatch) {
+          schema = q.getSchema(caseMatch)
+          resolvedName = caseMatch
+        } else {
+          const substringMatches = available.filter(n => n.toLowerCase().includes(lower))
+          if (substringMatches.length === 1) {
+            schema = q.getSchema(substringMatches[0])
+            resolvedName = substringMatches[0]
+          } else if (substringMatches.length > 1) {
+            console.error(`Schema "${name}" matches multiple schemas:`)
+            for (const m of substringMatches) {
+              console.error(`  ${m}`)
+            }
+            console.error(`Specify the exact name.`)
+            process.exit(1)
+          } else {
+            console.error(formatSchemaNotFound(name, available))
+            process.exit(1)
+          }
+        }
       }
 
       const fmt = getFormatterType(options)
-      const backRefs = q.getSchemaBackRefs(name)
+      const backRefs = q.getSchemaBackRefs(resolvedName)
 
       if (fmt === 'json') {
-        console.log(formatSchemaJSON(schema, backRefs))
+        console.log(formatSchemaJSON(schema!, backRefs))
       } else if (fmt === 'human') {
-        console.log(formatSchemaWithBackRefsHuman(schema, backRefs))
+        console.log(formatSchemaWithBackRefsHuman(schema!, backRefs))
       } else {
-        console.log(formatSchemaWithBackRefsLLM(schema, backRefs))
+        console.log(formatSchemaWithBackRefsLLM(schema!, backRefs))
       }
     } catch (err: any) {
       console.error(`Error: ${err.message}`)

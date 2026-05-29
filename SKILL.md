@@ -66,9 +66,17 @@ openapi-reader ls
 - `--deprecated` Show only deprecated endpoints
 - `--brief` Show method and path only (no descriptions)
 
+### `summary` — Show API overview
+
+`openapi-reader summary [spec]`
+
+**参数:**
+
+- `[spec]` Path or URL to OpenAPI 3.0 spec
+
 ### `get` — Get endpoint details
 
-`openapi-reader get [spec] [method] [path] [--params] [--response] [--depth]`
+`openapi-reader get [spec] [method] [path] [--params] [--response] [--example]`
 
 **参数:**
 
@@ -80,34 +88,37 @@ openapi-reader ls
 
 - `--params` Show only request parameters
 - `--response [code]` Show only response schemas, optionally filter by status code
-- `--depth <n>` Nested field depth (default: unlimited)
+- `--example` Generate request/response JSON examples
 
 ### `search` — Search endpoints, schemas, and fields by keyword
 
-`openapi-reader search [spec] [keyword]`
+`openapi-reader search [spec] [keyword] [--exact]`
 
 **参数:**
 
 - `[spec]` Path or URL to OpenAPI 3.0 spec
 - `[keyword]` Search keyword
 
+**选项:**
+
+- `--exact` Match field names exactly instead of substring
+
 ### `schema` — View a schema/model definition
 
-`openapi-reader schema [spec] [name] [--depth]`
+`openapi-reader schema [spec] [name]`
 
 **参数:**
 
 - `[spec]` Path or URL to OpenAPI 3.0 spec
 - `[name]` Schema name
 
-**选项:**
-
-- `--depth <n>` Nested field depth
-
 
 ## 示例
 
 ```bash
+# API 概览（标题/版本/端点数/tag/method/认证/服务器/模型/schema 列表 + 命令提示）
+openapi-reader spec.yaml summary
+
 # 概览与端点列表（一行显示标题/端点数/认证/服务器）
 openapi-reader https://api.example.com/openapi.json ls
 
@@ -123,7 +134,7 @@ openapi-reader spec.yaml ls --path pet
 # 只看端点列表（无描述）
 openapi-reader spec.yaml ls --brief
 
-# 查看端点详情（含参数和响应）
+# 查看端点详情（含参数和响应，ref 自动展开）
 openapi-reader spec.yaml get POST /users
 
 # 只看请求参数
@@ -132,10 +143,16 @@ openapi-reader spec.yaml get POST /users --params
 # 只看响应（指定状态码）
 openapi-reader spec.yaml get POST /users --response 201
 
+# 生成请求/响应 JSON 示例
+openapi-reader spec.yaml get POST /pets --example
+
 # 全局搜索：端点 + schema 字段 + 端点字段
 openapi-reader spec.yaml search user
 
-# 查看数据模型（自动显示引用来源）
+# 精确匹配字段名（不匹配子串，如 id 不匹配 petId）
+openapi-reader spec.yaml search id --exact
+
+# 查看数据模型（自动显示引用来源，ref 自动展开）
 openapi-reader spec.yaml schema User
 
 # 列出所有数据模型名称
@@ -146,9 +163,6 @@ openapi-reader spec.yaml get /users
 
 # 路径模糊匹配（无需前导 /）
 openapi-reader spec.yaml get POST pets
-
-# 限制嵌套展开深度（节省 token）
-openapi-reader spec.yaml get POST /users --depth 1
 
 # JSON 格式输出
 openapi-reader spec.yaml ls --format json
@@ -161,6 +175,18 @@ openapi-reader spec.yaml ls --format json
 ### 文本输出示例
 
 ```
+# summary (API 概览)
+## Pet Store API v1.0.0
+- Endpoints: 42
+- Tags: pets (12), users (8), store (22)
+- Methods: DELETE (5), GET (20), POST (10), PUT (7)
+- Auth: Bearer token (Authorization header)
+- Servers: https://api.example.com
+- Models: 15
+- Schemas: Pet, User, Order, Error, Address, PaymentRequest, ...
+
+> Commands: `ls` list endpoints | `get <method> <path>` details | `search <keyword>` search | `schema <name>` view model
+
 # ls (按 tag 分组，顶部概览)
 Pet Store API v1.0 | 42 endpoints | Auth: Bearer token
 ────────────────────────────────────────────────
@@ -235,15 +261,22 @@ Used by:
 
 ## 与 LLM 配合使用
 
-- 用 `openapi-reader spec.yaml ls` 快速了解 API 全貌（标题/端点数/认证/服务器 + 端点列表）
+- 用 `openapi-reader spec.yaml summary` 快速了解 API 全貌（标题/版本/端点数/tag/method 分布/认证/服务器/模型数/schema 列表 + 命令提示）
+- 用 `openapi-reader spec.yaml ls` 查看端点列表（标题/端点数/认证/服务器 + 按 tag 分组）
 - 用 `--path` 按路径过滤端点（支持模糊匹配）
-- 用 `--depth 1` 限制嵌套深度，减少 token 消耗
+- 用 `--example` 生成请求/响应 JSON 示例，便于快速构造调用
 - 用 `--format json` 输出结构化数据便于程序处理
+- `get` 命令自动展开所有 ref（嵌套 schema 字段直接内联显示）
 - `get` 命令支持 `--params`、`--response [code]` 子视图，只获取需要的信息
 - `get` 支持路径模糊匹配，传 POST pets 无需前导 /
 - `get --response` 在多方法路径下自动过滤无匹配响应的方法（如 `get /pets --response 201` 只返回 POST 的 201）
 - `search` 一次搜索所有来源：端点、schema 字段、端点参数字段（包括 oneOf variant 内部字段），按类别分组输出
+- `search --exact` 精确匹配字段名，避免子串匹配噪音（如 `id` 不匹配 `petId`）
+- `schema` 命令自动展开所有 ref（嵌套 schema 字段直接内联显示）
 - `schema` 自动显示 back references（哪些端点使用该模型）
 - `schema` 不传名称时列出所有模型及描述，便于发现和导航
+- `schema` 支持模糊查询：大小写不敏感精确匹配优先，其次子串匹配（唯一匹配自动选中，多个匹配列出候选）
+- `schema` 找不到时自动列出所有可用 schema 名称
+- `ls --tag` 无匹配时自动提示可用 tag 列表
+- `get` 多方法路径时显示简要列表而非全部详情，节省 token
 - spec 参数可选，支持环境变量和配置文件
-- 输出中的 `→ SchemaName` 表示可进一步查询的模型引用

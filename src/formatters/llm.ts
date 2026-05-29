@@ -320,7 +320,28 @@ export function formatSearchAllLLM(
   return sections.join('\n')
 }
 
-export function formatSummaryLLM(summary: ApiSummary): string {
+export function formatExampleLLM(examples: { request?: any; responses: Record<string, any> }): string {
+  const lines: string[] = []
+
+  if (examples.request !== undefined) {
+    lines.push('### Request Example')
+    lines.push('```json')
+    lines.push(JSON.stringify(examples.request, null, 2))
+    lines.push('```')
+  }
+
+  for (const [code, example] of Object.entries(examples.responses)) {
+    if (lines.length > 0 && examples.request !== undefined) lines.push('')
+    lines.push(`### Response ${code} Example`)
+    lines.push('```json')
+    lines.push(JSON.stringify(example, null, 2))
+    lines.push('```')
+  }
+
+  return lines.join('\n')
+}
+
+export function formatSummaryLLM(summary: ApiSummary, schemaNames: string[]): string {
   const lines: string[] = []
 
   const titleLine = summary.title ? `## ${summary.title} v${summary.version}` : `## API v${summary.version}`
@@ -335,6 +356,13 @@ export function formatSummaryLLM(summary: ApiSummary): string {
     lines.push(`- Tags: ${tagsStr}`)
   }
 
+  if (summary.methods.length > 0) {
+    const methodsStr = summary.methods
+      .map(m => `${m.method} (${m.count})`)
+      .join(', ')
+    lines.push(`- Methods: ${methodsStr}`)
+  }
+
   lines.push(`- Auth: ${summary.auth}`)
 
   if (summary.servers.length > 0) {
@@ -342,6 +370,18 @@ export function formatSummaryLLM(summary: ApiSummary): string {
   }
 
   lines.push(`- Models: ${summary.models}`)
+
+  if (schemaNames.length > 0) {
+    const SCHEMA_PREVIEW_LIMIT = 15
+    if (schemaNames.length > SCHEMA_PREVIEW_LIMIT) {
+      lines.push(`- Schemas: ${schemaNames.slice(0, SCHEMA_PREVIEW_LIMIT).join(', ')}, ... (${schemaNames.length - SCHEMA_PREVIEW_LIMIT} more)`)
+    } else {
+      lines.push(`- Schemas: ${schemaNames.join(', ')}`)
+    }
+  }
+
+  lines.push('')
+  lines.push('> Commands: `ls` list endpoints | `get <method> <path>` details | `search <keyword>` search | `schema <name>` view model')
 
   return lines.join('\n')
 }

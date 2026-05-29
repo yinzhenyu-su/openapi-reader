@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDetailHuman as formatDetail, formatParamsOnlyHuman as formatParamsOnly, formatResponseOnlyHuman as formatResponseOnly, formatCodesOnlyHuman as formatCodesOnly } from '../../formatters/detail.js'
+import { formatDetailHuman as formatDetail, formatParamsOnlyHuman as formatParamsOnly, formatResponseOnlyHuman as formatResponseOnly, formatCodesOnlyHuman as formatCodesOnly, formatExampleHuman } from '../../formatters/detail.js'
 import type { EndpointDetail } from '../../types.js'
 
 function createMockDetail(overrides: Partial<EndpointDetail> = {}): EndpointDetail {
@@ -182,6 +182,35 @@ describe('detail formatters', () => {
       expect(output).toContain('Possible codes')
       expect(output).toContain('200')
       expect(output).toContain('404')
+    })
+  })
+
+  describe('formatExampleHuman', () => {
+    it('should format request and response examples', () => {
+      const output = formatExampleHuman({
+        request: { name: 'Fido' },
+        responses: { '201': { id: '123' } },
+      })
+      expect(output).toContain('Request Example:')
+      expect(output).toContain('Response 201 Example:')
+      expect(output).toContain('"name": "Fido"')
+    })
+
+    it('should handle request-only', () => {
+      const output = formatExampleHuman({
+        request: { name: 'test' },
+        responses: {},
+      })
+      expect(output).toContain('Request Example:')
+      expect(output).not.toContain('Response')
+    })
+
+    it('should handle response-only', () => {
+      const output = formatExampleHuman({
+        responses: { '200': { status: 'ok' } },
+      })
+      expect(output).not.toContain('Request')
+      expect(output).toContain('Response 200 Example:')
     })
   })
 })
