@@ -6,7 +6,7 @@
     "@semantic-release/changelog",
     "@semantic-release/npm",
     ["@semantic-release/exec", {
-      "prepareCmd": "sed -i 's/^# openapi-reader v.*/# openapi-reader v${nextRelease.version}/' SKILL.md"
+      "prepareCmd": "npm run generate:skill"
     }],
     "@semantic-release/github",
     "@semantic-release/git"
