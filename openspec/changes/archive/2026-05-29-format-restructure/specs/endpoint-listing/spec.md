@@ -1,28 +1,24 @@
-## ADDED Requirements
+## MODIFIED Requirements
 
 ### Requirement: List all endpoints
 
 The system SHALL list all API endpoints when the `ls` command is used.
 
-The output SHALL group endpoints by their OpenAPI `tags`, with each tag as a section header.
+The default output format (`llm`) SHALL use Markdown structure:
+- Tag groups as `## <tag>` headers
+- Each endpoint on its own line: `<method> <path>  <summary>`
+- No column padding on method
+- Human format (`--format human`) SHALL retain the original aligned-column layout
 
-Each endpoint line SHALL show: HTTP method, full path, and summary.
+The output SHALL group endpoints by their OpenAPI `tags`, with each tag as a section header.
 
 Endpoints without a `tag` SHALL be grouped under "Other".
 
 The output SHALL be ordered by tag name alphabetically, then by path and method within each tag.
 
-The system SHALL support two output formats:
-- Default (`llm`): Markdown structure with `## <tag>` headers, `<method> <path>  <summary>` lines, no column padding
-- Human (`--format human`): Original aligned-column layout with `  <tag>:` headers and padded method column
-
-#### Scenario: List endpoints with tags
-- **WHEN** user runs `openapi-reader spec.yaml ls`
-- **THEN** output SHALL show endpoints grouped by tag
-
 #### Scenario: List endpoints in default LLM format
 - **WHEN** user runs `openapi-reader spec.yaml ls`
-- **THEN** output SHALL show `## <tag>` headers with unaligned method + path + summary lines
+- **THEN** output SHALL show `## <tag>` headers with unaligned method + path lines
 
 #### Scenario: List endpoints in human format
 - **WHEN** user runs `openapi-reader spec.yaml ls --format human`

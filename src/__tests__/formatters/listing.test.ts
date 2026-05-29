@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatListing } from '../../formatters/listing.js'
+import { formatListingHuman as formatListing } from '../../formatters/listing.js'
 import type { EndpointSummary } from '../../types.js'
 
 describe('listing formatter', () => {

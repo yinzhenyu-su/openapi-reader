@@ -1,6 +1,6 @@
 import type { EndpointSummary } from '../types.js'
 
-export function formatSearch(results: EndpointSummary[], keyword: string): string {
+export function formatSearchHuman(results: EndpointSummary[], keyword: string): string {
   if (results.length === 0) {
     return `No endpoints matching "${keyword}"`
   }

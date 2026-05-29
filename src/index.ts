@@ -3,11 +3,15 @@
 import { Command } from 'commander'
 import { OpenApiParser } from './parser.js'
 import { QueryEngine } from './query.js'
-import { formatListing } from './formatters/listing.js'
-import { formatDetail, formatParamsOnly, formatResponseOnly, formatCodesOnly } from './formatters/detail.js'
-import { formatSearch } from './formatters/search.js'
-import { formatSchema, formatSchemaWithBackRefs, formatSchemaNotFound } from './formatters/schema.js'
-import { formatSummary } from './formatters/summary.js'
+import { formatListingHuman } from './formatters/listing.js'
+import { formatDetailHuman, formatParamsOnlyHuman, formatResponseOnlyHuman, formatCodesOnlyHuman } from './formatters/detail.js'
+import { formatSearchHuman } from './formatters/search.js'
+import { formatSchemaHuman, formatSchemaWithBackRefsHuman, formatSchemaNotFound } from './formatters/schema.js'
+import { formatSummaryHuman } from './formatters/summary.js'
+import {
+  formatListingLLM, formatDetailLLM, formatParamsOnlyLLM, formatResponseOnlyLLM, formatCodesOnlyLLM,
+  formatSearchLLM, formatSchemaLLM, formatSchemaWithBackRefsLLM, formatSummaryLLM
+} from './formatters/llm.js'
 import {
   formatListingJSON, formatDetailJSON, formatSearchJSON,
   formatSchemaJSON, formatSummaryJSON
@@ -25,8 +29,13 @@ async function ensureLoaded(specPath: string): Promise<QueryEngine> {
   return query
 }
 
-function shouldFormatJson(commandOptions: any): boolean {
-  return commandOptions.format === 'json' || program.opts().format === 'json'
+type FormatType = 'llm' | 'human' | 'json'
+
+function getFormatterType(commandOptions: any): FormatType {
+  const fmt = commandOptions.format || program.opts().format
+  if (fmt === 'json') return 'json'
+  if (fmt === 'text' || fmt === 'human') return 'human'
+  return 'llm'
 }
 
 function estimateTokens(text: string): number {
@@ -54,7 +63,7 @@ program
   .name('openapi-reader')
   .description('CLI tool for LLM-friendly OpenAPI document querying')
   .version('0.1.0')
-  .option('--format <type>', 'Output format: text or json', 'text')
+  .option('--format <type>', 'Output format: llm, human (or text), json', 'llm')
   .option('--no-cache', 'Skip cache for remote specs')
 
 program
@@ -75,10 +84,13 @@ program
         deprecated: options.deprecated || undefined,
       })
 
-      if (shouldFormatJson(options)) {
+      const fmt = getFormatterType(options)
+      if (fmt === 'json') {
         console.log(formatListingJSON(endpoints))
+      } else if (fmt === 'human') {
+        console.log(formatListingHuman(endpoints))
       } else {
-        console.log(formatListing(endpoints))
+        console.log(formatListingLLM(endpoints))
       }
     } catch (err: any) {
       console.error(`Error: ${err.message}`)
@@ -105,11 +117,13 @@ program
       const q = await ensureLoaded(spec)
       const depth = options.depth ?? -1
 
+      const fmt = getFormatterType(options)
+
       if (options.params) {
         const params = q.getEndpointParams(method, path, depth)
         if (!params) { console.error(`Error: Endpoint ${method.toUpperCase()} ${path} not found`); process.exit(1) }
         const detail = q.getEndpointDetail(method, path, depth)!
-        let output = formatParamsOnly(detail)
+        let output = fmt === 'llm' ? formatParamsOnlyLLM(detail) : formatParamsOnlyHuman(detail)
         if (options.maxTokens) output = truncateToBudget(output, options.maxTokens)
         console.log(output)
       } else if (options.response !== undefined) {
@@ -119,21 +133,25 @@ program
           console.error(`Error: No responses found${code ? ` for code ${code}` : ''}`)
           process.exit(1)
         }
-        let output = formatResponseOnly(method, path, responses)
+        let output = fmt === 'llm' ? formatResponseOnlyLLM(method, path, responses) : formatResponseOnlyHuman(method, path, responses)
         if (options.maxTokens) output = truncateToBudget(output, options.maxTokens)
         console.log(output)
       } else if (options.codes) {
         const codes = q.getEndpointCodes(method, path)
         if (!codes) { console.error('Error: No codes found'); process.exit(1) }
-        console.log(formatCodesOnly(method, path, codes))
+        console.log(fmt === 'llm' ? formatCodesOnlyLLM(method, path, codes) : formatCodesOnlyHuman(method, path, codes))
       } else {
         const detail = q.getEndpointDetail(method, path, depth)
         if (!detail) { console.error(`Error: Endpoint ${method.toUpperCase()} ${path} not found`); process.exit(1) }
 
-        if (shouldFormatJson(options)) {
+        if (fmt === 'json') {
           console.log(formatDetailJSON(detail))
+        } else if (fmt === 'human') {
+          let output = formatDetailHuman(detail)
+          if (options.maxTokens) output = truncateToBudget(output, options.maxTokens)
+          console.log(output)
         } else {
-          let output = formatDetail(detail)
+          let output = formatDetailLLM(detail)
           if (options.maxTokens) output = truncateToBudget(output, options.maxTokens)
           console.log(output)
         }
@@ -153,10 +171,13 @@ program
     try {
       const q = await ensureLoaded(spec)
       const results = q.searchEndpoints(keyword)
-      if (shouldFormatJson({})) {
+      const fmt = getFormatterType({})
+      if (fmt === 'json') {
         console.log(formatSearchJSON(results))
+      } else if (fmt === 'human') {
+        console.log(formatSearchHuman(results, keyword))
       } else {
-        console.log(formatSearch(results, keyword))
+        console.log(formatSearchLLM(results, keyword))
       }
     } catch (err: any) {
       console.error(`Error: ${err.message}`)
@@ -182,18 +203,24 @@ program
         process.exit(1)
       }
 
+      const fmt = getFormatterType(options)
+
       if (options.usedBy) {
         const backRefs = q.getSchemaBackRefs(name)
-        if (shouldFormatJson(options)) {
+        if (fmt === 'json') {
           console.log(formatSchemaJSON(schema, backRefs))
+        } else if (fmt === 'human') {
+          console.log(formatSchemaWithBackRefsHuman(schema, backRefs))
         } else {
-          console.log(formatSchemaWithBackRefs(schema, backRefs))
+          console.log(formatSchemaWithBackRefsLLM(schema, backRefs))
         }
       } else {
-        if (shouldFormatJson(options)) {
+        if (fmt === 'json') {
           console.log(formatSchemaJSON(schema))
+        } else if (fmt === 'human') {
+          console.log(formatSchemaHuman(schema))
         } else {
-          console.log(formatSchema(schema))
+          console.log(formatSchemaLLM(schema))
         }
       }
     } catch (err: any) {
@@ -210,10 +237,13 @@ program
     try {
       const q = await ensureLoaded(spec)
       const summary = q.getApiSummary()
-      if (shouldFormatJson(options)) {
+      const fmt = getFormatterType(options)
+      if (fmt === 'json') {
         console.log(formatSummaryJSON(summary))
+      } else if (fmt === 'human') {
+        console.log(formatSummaryHuman(summary))
       } else {
-        console.log(formatSummary(summary))
+        console.log(formatSummaryLLM(summary))
       }
     } catch (err: any) {
       console.error(`Error: ${err.message}`)

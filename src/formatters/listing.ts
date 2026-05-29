@@ -1,6 +1,6 @@
 import type { EndpointSummary } from '../types.js'
 
-export function formatListing(endpoints: EndpointSummary[]): string {
+export function formatListingHuman(endpoints: EndpointSummary[]): string {
   const groups = new Map<string, EndpointSummary[]>()
   for (const ep of endpoints) {
     for (const tag of ep.tags) {

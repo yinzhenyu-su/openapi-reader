@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSearch } from '../../formatters/search.js'
+import { formatSearchHuman as formatSearch } from '../../formatters/search.js'
 import type { EndpointSummary } from '../../types.js'
 
 describe('search formatter', () => {

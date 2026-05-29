@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSummary } from '../../formatters/summary.js'
+import { formatSummaryHuman as formatSummary } from '../../formatters/summary.js'
 import type { ApiSummary } from '../../types.js'
 
 describe('summary formatter', () => {

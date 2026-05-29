@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatDetail, formatParamsOnly, formatResponseOnly, formatCodesOnly } from '../../formatters/detail.js'
+import { formatDetailHuman as formatDetail, formatParamsOnlyHuman as formatParamsOnly, formatResponseOnlyHuman as formatResponseOnly, formatCodesOnlyHuman as formatCodesOnly } from '../../formatters/detail.js'
 import type { EndpointDetail } from '../../types.js'
 
 function createMockDetail(overrides: Partial<EndpointDetail> = {}): EndpointDetail {

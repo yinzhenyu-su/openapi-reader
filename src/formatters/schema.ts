@@ -1,7 +1,7 @@
 import type { SchemaInfo, BackRef } from '../types.js'
 import { fmtFields, fmtSeparator } from './shared.js'
 
-export function formatSchema(schema: SchemaInfo): string {
+export function formatSchemaHuman(schema: SchemaInfo): string {
   const lines: string[] = []
 
   lines.push(`${schema.name}`)
@@ -16,8 +16,8 @@ export function formatSchema(schema: SchemaInfo): string {
   return lines.join('\n')
 }
 
-export function formatSchemaWithBackRefs(schema: SchemaInfo, backRefs: BackRef[]): string {
-  const lines = [formatSchema(schema), '']
+export function formatSchemaWithBackRefsHuman(schema: SchemaInfo, backRefs: BackRef[]): string {
+  const lines = [formatSchemaHuman(schema), '']
 
   if (backRefs.length === 0) {
     lines.push('Not used by any endpoint')

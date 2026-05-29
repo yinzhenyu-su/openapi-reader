@@ -1,7 +1,7 @@
 import type { ApiSummary } from '../types.js'
 import { fmtSeparator } from './shared.js'
 
-export function formatSummary(summary: ApiSummary): string {
+export function formatSummaryHuman(summary: ApiSummary): string {
   const lines: string[] = []
 
   const titleLine = summary.title ? `${summary.title} v${summary.version}` : `API v${summary.version}`

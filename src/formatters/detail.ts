@@ -1,7 +1,7 @@
 import type { EndpointDetail, FieldInfo } from '../types.js'
 import { fmtFields, fmtSeparator } from './shared.js'
 
-export function formatDetail(detail: EndpointDetail): string {
+export function formatDetailHuman(detail: EndpointDetail): string {
   const lines: string[] = []
 
   lines.push(`${detail.method} ${detail.path}`)
@@ -67,7 +67,7 @@ export function formatDetail(detail: EndpointDetail): string {
   return lines.join('\n').trimEnd()
 }
 
-export function formatParamsOnly(detail: EndpointDetail): string {
+export function formatParamsOnlyHuman(detail: EndpointDetail): string {
   const lines: string[] = []
 
   lines.push(`${detail.method} ${detail.path}`)
@@ -108,7 +108,7 @@ export function formatParamsOnly(detail: EndpointDetail): string {
   return lines.join('\n').trimEnd()
 }
 
-export function formatResponseOnly(
+export function formatResponseOnlyHuman(
   method: string,
   path: string,
   responses: { code: string; description: string; fields: FieldInfo[] }[]
@@ -130,7 +130,7 @@ export function formatResponseOnly(
   return lines.join('\n').trimEnd()
 }
 
-export function formatCodesOnly(
+export function formatCodesOnlyHuman(
   method: string,
   path: string,
   codes: { code: string; description: string }[]

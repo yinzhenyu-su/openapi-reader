@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { formatSchema, formatSchemaWithBackRefs, formatSchemaNotFound } from '../../formatters/schema.js'
+import { formatSchemaHuman as formatSchema, formatSchemaWithBackRefsHuman as formatSchemaWithBackRefs, formatSchemaNotFound } from '../../formatters/schema.js'
 import type { SchemaInfo, BackRef } from '../../types.js'
 
 describe('schema formatters', () => {
