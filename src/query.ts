@@ -76,17 +76,21 @@ function mergeAllOf(schema: OpenAPIV3.SchemaObject): OpenAPIV3.SchemaObject {
   return merged
 }
 
+const SCHEMA_MAX_DEPTH = 200
+
 function schemaToFields(
   schema: OpenAPIV3.SchemaObject,
   schemaRegistry: Record<string, OpenAPIV3.SchemaObject>,
-  visited: Set<string> = new Set()
+  visited: Set<any> = new Set(),
+  depth = 0
 ): FieldInfo[] {
+  if (depth > SCHEMA_MAX_DEPTH) return []
   const resolved = mergeAllOf(schema)
 
   if (resolved.type === 'array') {
     const items = resolved.items as OpenAPIV3.SchemaObject | undefined
     if (items?.type === 'object' && items.properties) {
-      return schemaToFields(items, schemaRegistry, visited)
+      return schemaToFields(items, schemaRegistry, visited, depth + 1)
     }
   }
 
@@ -104,27 +108,26 @@ function schemaToFields(
 
       description: propSchema.description ?? '',
       enumValues: propSchema.enum as string[] | undefined,
-      defaultValue: propSchema.default != null ? String(propSchema.default) : undefined,
-      example: propSchema.example != null ? String(propSchema.example) : undefined,
+      defaultValue: propSchema.default != null ? (typeof propSchema.default === 'object' ? JSON.stringify(propSchema.default) : String(propSchema.default)) : undefined,
+      example: propSchema.example != null ? (typeof propSchema.example === 'object' ? JSON.stringify(propSchema.example) : String(propSchema.example)) : undefined,
       ref: isKnownType ? undefined : typeStr,
     }
 
     if (propSchema.oneOf && propSchema.oneOf.length > 0) {
       field.oneOf = propSchema.oneOf.map(variant => {
         const v = variant as OpenAPIV3.SchemaObject
-        return schemaToFields(v, schemaRegistry, visited)
+        return schemaToFields(v, schemaRegistry, visited, depth + 1)
       })
     }
 
     if (propSchema.properties) {
       if ((typeStr === 'object' || !isKnownType) && !typeStr.endsWith('[]')) {
-        const schemaName = propSchema.title && propSchema.title !== typeStr ? propSchema.title : typeStr
-        if (visited.has(schemaName)) {
-          field.ref = schemaName
+        if (visited.has(propSchema)) {
+          field.ref = typeStr
         } else {
-          visited.add(schemaName)
-          field.children = schemaToFields(propSchema, schemaRegistry, visited)
-          visited.delete(schemaName)
+          visited.add(propSchema)
+          field.children = schemaToFields(propSchema, schemaRegistry, visited, depth + 1)
+          visited.delete(propSchema)
         }
       }
     }
@@ -132,30 +135,28 @@ function schemaToFields(
     if (propSchema.type === 'array') {
       const items = propSchema.items as OpenAPIV3.SchemaObject | undefined
       if (items && items.type === 'object' && items.properties) {
-        const schemaName = items.title
-        if (schemaName && visited.has(schemaName)) {
-          field.ref = schemaName
+        if (visited.has(items)) {
+          field.ref = items.title || typeStr
         } else {
-          if (schemaName) visited.add(schemaName)
-          field.children = schemaToFields(items, schemaRegistry, visited)
-          if (schemaName) visited.delete(schemaName)
+          visited.add(items)
+          field.children = schemaToFields(items, schemaRegistry, visited, depth + 1)
+          visited.delete(items)
         }
       }
     }
 
     if (propSchema.type === 'object' && !propSchema.properties && propSchema.title) {
-      const schemaName = propSchema.title
-      if (visited.has(schemaName)) {
-        field.ref = schemaName
-      } else {
-        const refSchema = schemaRegistry[schemaName]
-        if (refSchema) {
-          visited.add(schemaName)
-          field.children = schemaToFields(refSchema, schemaRegistry, visited)
-          visited.delete(schemaName)
+      const refSchema = schemaRegistry[propSchema.title]
+      if (refSchema) {
+        if (visited.has(refSchema)) {
+          field.ref = propSchema.title
         } else {
-          field.ref = schemaName
+          visited.add(refSchema)
+          field.children = schemaToFields(refSchema, schemaRegistry, visited, depth + 1)
+          visited.delete(refSchema)
         }
+      } else {
+        field.ref = propSchema.title
       }
     }
 
@@ -183,6 +184,10 @@ function sortFields(fields: FieldInfo[]): FieldInfo[] {
     const pb = priority(b)
     if (pa !== pb) return pa - pb
     return a.name.localeCompare(b.name)
+  }).map(f => {
+    if (f.children) f.children = sortFields(f.children)
+    if (f.oneOf) f.oneOf = f.oneOf.map(v => sortFields(v))
+    return f
   })
 }
 
@@ -234,7 +239,7 @@ export class QueryEngine {
       ops = ops.filter(op => op.method === filters.method!.toUpperCase())
     }
     if (filters?.deprecated !== undefined) {
-      ops = ops.filter(op => (op as any).deprecated === filters.deprecated)
+      ops = ops.filter(op => op.deprecated === filters.deprecated)
     }
 
     return ops.map(op => ({
@@ -242,7 +247,7 @@ export class QueryEngine {
       path: op.path,
       summary: op.summary,
       tags: op.tags.length > 0 ? op.tags : ['Other'],
-      deprecated: (op as any).deprecated ?? false,
+      deprecated: op.deprecated ?? false,
     }))
   }
 
@@ -316,8 +321,8 @@ export class QueryEngine {
       path: op.path,
       summary: op.summary || op.description,
       auth,
-      deprecated: (op as any).deprecated ?? false,
-      deprecationMessage: (op as any).deprecationMessage ?? undefined,
+      deprecated: op.deprecated ?? false,
+      deprecationMessage: op.deprecationMessage ?? undefined,
       params,
       responses,
       codes,
@@ -398,15 +403,17 @@ export class QueryEngine {
 
     return refs
 
-    function hasRef(schema: OpenAPIV3.SchemaObject | undefined, target: string): boolean {
+    function hasRef(schema: OpenAPIV3.SchemaObject | undefined, target: string, visited = new Set<any>()): boolean {
       if (!schema) return false
+      if (visited.has(schema)) return false
+      visited.add(schema)
       if (schema.title === target) return true
 
       if (schema.allOf) {
         for (const entry of schema.allOf) {
           const sub = entry as OpenAPIV3.SchemaObject
           if (sub.title === target) return true
-          if (hasRef(sub, target)) return true
+          if (hasRef(sub, target, visited)) return true
         }
       }
 
@@ -424,7 +431,7 @@ export class QueryEngine {
             }
           }
           if (p.type === 'object' && p.properties) {
-            if (hasRef(p, target)) return true
+            if (hasRef(p, target, visited)) return true
           }
         }
       }
@@ -439,7 +446,7 @@ export class QueryEngine {
       path: op.path,
       summary: op.summary,
       tags: op.tags.length > 0 ? op.tags : ['Other'],
-      deprecated: (op as any).deprecated ?? false,
+      deprecated: op.deprecated ?? false,
     }))
   }
 
@@ -481,7 +488,8 @@ export class QueryEngine {
     return results.sort((a, b) => a.path.localeCompare(b.path))
   }
 
-  generateExample(schema: OpenAPIV3.SchemaObject, visited = new Set<string>()): any {
+  generateExample(schema: OpenAPIV3.SchemaObject, visited = new Set<any>(), depth = 0): any {
+    if (depth > 200) return null
     if (schema.allOf) {
       schema = mergeAllOf(schema)
     }
@@ -491,10 +499,10 @@ export class QueryEngine {
     if (schema.enum && schema.enum.length > 0) return schema.enum[0]
 
     if (schema.oneOf && schema.oneOf.length > 0) {
-      return this.generateExample(schema.oneOf[0] as OpenAPIV3.SchemaObject, visited)
+      return this.generateExample(schema.oneOf[0] as OpenAPIV3.SchemaObject, visited, depth + 1)
     }
     if (schema.anyOf && schema.anyOf.length > 0) {
-      return this.generateExample(schema.anyOf[0] as OpenAPIV3.SchemaObject, visited)
+      return this.generateExample(schema.anyOf[0] as OpenAPIV3.SchemaObject, visited, depth + 1)
     }
 
     const type = schema.type
@@ -502,24 +510,23 @@ export class QueryEngine {
     if (type === 'array') {
       const items = schema.items as OpenAPIV3.SchemaObject | undefined
       if (!items) return []
-      return [this.generateExample(items, visited)]
+      return [this.generateExample(items, visited, depth + 1)]
     }
 
     if (type === 'object' || (!type && schema.properties)) {
-      const title = schema.title
-      if (title && visited.has(title)) return {}
-      if (title) visited.add(title)
+      if (visited.has(schema)) return {}
+      visited.add(schema)
 
       const obj: Record<string, any> = {}
       const required = new Set(schema.required ?? [])
       const properties = schema.properties ?? {}
       for (const [name, prop] of Object.entries(properties)) {
         if (required.has(name)) {
-          obj[name] = this.generateExample(prop as OpenAPIV3.SchemaObject, visited)
+          obj[name] = this.generateExample(prop as OpenAPIV3.SchemaObject, visited, depth + 1)
         }
       }
 
-      if (title) visited.delete(title)
+      visited.delete(schema)
       return obj
     }
 
@@ -603,8 +610,8 @@ export class QueryEngine {
         required: param.required ?? false,
         description: param.description ?? '',
         enumValues: schema.enum as string[] | undefined,
-        defaultValue: schema.default != null ? String(schema.default) : undefined,
-        example: schema.example != null ? String(schema.example) : undefined,
+        defaultValue: schema.default != null ? (typeof schema.default === 'object' ? JSON.stringify(schema.default) : String(schema.default)) : undefined,
+        example: schema.example != null ? (typeof schema.example === 'object' ? JSON.stringify(schema.example) : String(schema.example)) : undefined,
       }
 
       if (param.in === 'path') pathParams.push(field)
@@ -641,6 +648,9 @@ export class QueryEngine {
     return result.sort((a, b) => {
       const na = parseInt(a.code, 10)
       const nb = parseInt(b.code, 10)
+      if (isNaN(na) && isNaN(nb)) return a.code.localeCompare(b.code)
+      if (isNaN(na)) return 1
+      if (isNaN(nb)) return -1
       return na - nb
     })
   }
@@ -652,6 +662,9 @@ export class QueryEngine {
     }).sort((a, b) => {
       const na = parseInt(a.code, 10)
       const nb = parseInt(b.code, 10)
+      if (isNaN(na) && isNaN(nb)) return a.code.localeCompare(b.code)
+      if (isNaN(na)) return 1
+      if (isNaN(nb)) return -1
       return na - nb
     })
   }
