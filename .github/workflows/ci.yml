@@ -3,6 +3,7 @@ name: CI/CD
 on:
   push:
     branches: [main]
+    tags: ['*']
   pull_request:
     branches: [main]
 
@@ -62,7 +63,7 @@ jobs:
           retention-days: 1
 
   release:
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: startsWith(github.ref, 'refs/tags/')
     needs: [lint, test, build]
     runs-on: ubuntu-latest
     permissions:
